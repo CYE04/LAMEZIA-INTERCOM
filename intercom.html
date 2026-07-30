@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#161617" media="(prefers-color-scheme: dark)">
+<title>CECP 敬拜团内通</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #f5f5f7; }
+  @media (prefers-color-scheme: dark) { html, body { background: #161617; } }
+</style>
+</head>
+<body>
+  <!-- 合体入口：进去先选「敬拜团 / 音控组」，音控组要密码 -->
+  <cecp-intercom
+    data-ws-url="wss://cecp-ws.cecp.workers.dev"
+    data-mode="menu"></cecp-intercom>
+
+  <!-- cecp.js 就在同一个文件夹里，相对路径引用即可 -->
+  <script src="cecp.js"></script>
+</body>
+</html>
