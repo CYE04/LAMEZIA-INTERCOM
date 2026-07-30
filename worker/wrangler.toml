@@ -1,6 +1,17 @@
-name = "cecp-ws"
+name = "ws-lamezia"
 main = "index.js"
 compatibility_date = "2025-01-01"
+
+[vars]
+# 允许连接的网页来源，逗号分隔。
+#   - GitHub Pages 的来源只有域名部分，不含仓库路径
+#     （https://cye04.github.io/LAMEZIA-INTERCOM/ 的 Origin 是 https://cye04.github.io）
+#   - localhost / 127.0.0.1 任意端口都放行，方便本地 python3 -m http.server 调试
+# 换了 GitHub 账号或用了自定义域名，改这一行。
+ALLOWED_ORIGINS = "https://cye04.github.io"
+
+# 每日凌晨自动清理的时区
+DAILY_RESET_TZ = "Europe/Rome"
 
 [durable_objects]
 bindings = [
@@ -10,3 +21,6 @@ bindings = [
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["WorshipRoom"]
+
+# ⚠️ 音控密码不写在这里，用命令单独设置（不会进仓库）：
+#      npx wrangler secret put OPERATOR_KEY

@@ -1,0 +1,24 @@
+<!--
+  图标矢量源（给设计师改图用，不参与运行时）。
+  几何参数与 tools/make-icons.py 里的 CONFIG / glyph() 一一对应。
+  改完这里，请同步改 make-icons.py 后重新生成 PNG：
+      python3 tools/make-icons.py
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <!-- 背景圆角方块，radius = 0.22 × 512 -->
+  <rect x="0" y="0" width="512" height="512" rx="112.64" ry="112.64" fill="#0A6CF5"/>
+
+  <g fill="none" stroke="#FFFFFF">
+    <!-- 话筒头：胶囊 y 0.20→0.52，半宽 0.105 -->
+    <rect x="202.24" y="102.4" width="107.52" height="163.84" rx="53.76" ry="53.76" fill="#FFFFFF" stroke="none"/>
+
+    <!-- 托架：下半圆环，中心 (0.5, 0.47)，中线半径 104.96，线宽 20.48 -->
+    <path d="M 151.04 240.64 A 104.96 104.96 0 0 0 360.96 240.64"
+          stroke-width="20.48" stroke-linecap="butt"/>
+  </g>
+
+  <!-- 立杆 -->
+  <rect x="248.32" y="353.28" width="15.36" height="46.08" rx="7.68" ry="7.68" fill="#FFFFFF"/>
+  <!-- 底座 -->
+  <rect x="192" y="396.8" width="128" height="22.02" rx="10.75" ry="10.75" fill="#FFFFFF"/>
+</svg>

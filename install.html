@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#161617" media="(prefers-color-scheme: dark)">
+<title>安装 LAMEZIA 敬拜内通</title>
+
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="敬拜内通">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f5f5f7;
+    --card: #ffffff;
+    --text: #1d1d1f;
+    --muted: #6e6e73;
+    --line: rgba(0,0,0,.09);
+    --accent: #0a6cf5;
+    --warn-bg: #fff4e5;
+    --warn-line: #f0c894;
+    --warn-text: #8a5300;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #161617; --card: #1f1f21; --text: #f5f5f7; --muted: #98989d;
+      --line: rgba(255,255,255,.12); --accent: #2997ff;
+      --warn-bg: #3a2a10; --warn-line: #6b4d1c; --warn-text: #ffd699;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, "Noto Sans SC", sans-serif;
+    padding:
+      calc(24px + env(safe-area-inset-top, 0px))
+      calc(18px + env(safe-area-inset-right, 0px))
+      calc(40px + env(safe-area-inset-bottom, 0px))
+      calc(18px + env(safe-area-inset-left, 0px));
+    -webkit-text-size-adjust: 100%;
+  }
+  .wrap { max-width: 560px; margin: 0 auto; }
+
+  /* 内置浏览器警告：这是分发时最常见的失败原因，必须最显眼 */
+  .browser-warn {
+    display: none;
+    margin-bottom: 22px; padding: 16px 18px;
+    background: var(--warn-bg); border: 1px solid var(--warn-line); border-radius: 14px;
+    color: var(--warn-text);
+  }
+  .browser-warn.show { display: block; }
+  .browser-warn b { display: block; font-size: 17px; margin-bottom: 4px; }
+
+  header { text-align: center; margin-bottom: 26px; }
+  header img { width: 72px; height: 72px; border-radius: 17px; display: block; margin: 0 auto 14px; }
+  h1 { font-size: 25px; line-height: 1.25; margin: 0 0 6px; letter-spacing: -.02em; }
+  .sub { color: var(--muted); font-size: 15px; margin: 0; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 18px; padding: 20px; margin-bottom: 18px;
+  }
+  .card h2 { font-size: 17px; margin: 0 0 14px; letter-spacing: -.01em; }
+
+  .qr { text-align: center; }
+  .qr svg { width: 220px; height: 220px; border-radius: 10px; display: block; margin: 0 auto 14px; }
+  .link {
+    display: block; width: 100%; font-size: 13px; color: var(--muted);
+    word-break: break-all; text-align: center; margin-bottom: 12px;
+  }
+
+  .btn {
+    display: block; width: 100%; padding: 13px 18px;
+    font: inherit; font-weight: 600; color: #fff; background: var(--accent);
+    border: none; border-radius: 12px; cursor: pointer; text-align: center;
+    -webkit-appearance: none;
+  }
+  .btn:active { opacity: .85; }
+  .btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+  .btn + .btn { margin-top: 10px; }
+  #install-btn { display: none; }
+
+  ol { margin: 0; padding-left: 22px; }
+  ol li { margin-bottom: 10px; }
+  ol li:last-child { margin-bottom: 0; }
+  .key {
+    display: inline-block; padding: 1px 8px; margin: 0 2px;
+    background: var(--bg); border: 1px solid var(--line); border-radius: 6px;
+    font-size: 14px; white-space: nowrap;
+  }
+  .note { color: var(--muted); font-size: 14px; margin: 12px 0 0; }
+  .roles { margin: 0; padding: 0; list-style: none; }
+  .roles li { display: flex; gap: 11px; align-items: flex-start; margin-bottom: 12px; }
+  .roles li:last-child { margin-bottom: 0; }
+  .roles .ico { font-size: 21px; line-height: 1.3; }
+  .roles b { display: block; }
+  .roles span { color: var(--muted); font-size: 14px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="browser-warn" id="browser-warn">
+    <b>⚠️ 请先用系统浏览器打开</b>
+    当前是微信 / QQ 内置浏览器，<b style="display:inline">没有</b>「添加到主屏幕」功能。
+    请点击右上角的 <span class="key">···</span> ，选择
+    <span class="key" id="warn-hint">在浏览器中打开</span>，再按下面的步骤操作。
+  </div>
+
+  <header>
+    <img src="icons/icon-192.png" alt="">
+    <h1>LAMEZIA 敬拜内通</h1>
+    <p class="sub">装到手机主屏幕，像 app 一样使用</p>
+  </header>
+
+  <div class="card qr">
+    <h2>① 用手机扫这个码</h2>
+    <div id="qr"></div>
+    <a class="link" id="entry-link" href="index.html"></a>
+    <button class="btn ghost" id="copy-btn" type="button">复制链接</button>
+    <button class="btn" id="install-btn" type="button">安装到主屏幕</button>
+    <button class="btn ghost" id="open-btn" type="button" style="margin-top:10px">直接打开</button>
+  </div>
+
+  <div class="card" id="steps-ios" hidden>
+    <h2>② 加到主屏幕（iPhone / iPad）</h2>
+    <ol>
+      <li>确认现在用的是 <b>Safari</b>（其它浏览器加不了）</li>
+      <li>点屏幕底部中间的 <span class="key">分享</span> 按钮（方框里一个向上箭头）</li>
+      <li>在弹出的列表里往下滑，点 <span class="key">添加到主屏幕</span></li>
+      <li>右上角点 <span class="key">添加</span></li>
+    </ol>
+    <p class="note">装好后桌面会出现一个话筒图标，以后从那里进就行。</p>
+  </div>
+
+  <div class="card" id="steps-android" hidden>
+    <h2>② 加到主屏幕（安卓）</h2>
+    <ol>
+      <li>如果上面出现了 <b>「安装到主屏幕」</b> 蓝色按钮，直接点它即可</li>
+      <li>没有的话，点浏览器右上角的 <span class="key">⋮</span></li>
+      <li>选 <span class="key">添加到主屏幕</span> 或 <span class="key">安装应用</span></li>
+      <li>确认 <span class="key">添加</span></li>
+    </ol>
+    <p class="note">建议用 Chrome。装好后桌面会出现一个话筒图标。</p>
+  </div>
+
+  <div class="card" id="steps-desktop" hidden>
+    <h2>② 装到电脑（音控台建议这样做）</h2>
+    <ol>
+      <li>用 <b>Chrome</b> 或 <b>Edge</b> 打开上面的链接</li>
+      <li>点地址栏右侧的 <span class="key">安装</span> 图标（显示器带下箭头）</li>
+      <li>确认安装，之后可以像普通软件一样打开</li>
+    </ol>
+    <p class="note">
+      音控台电脑可以把 <span class="key" id="op-link">?mode=operator</span>
+      这个地址存成书签，打开就直接进音控台，不用每次选身份。
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>③ 进去之后</h2>
+    <ul class="roles">
+      <li>
+        <span class="ico">🎤</span>
+        <div><b>敬拜团</b><span>选你今天用的话筒或乐器，填名字，直接就能用。</span></div>
+      </li>
+      <li>
+        <span class="ico">🎚️</span>
+        <div><b>音控组</b><span>需要密码，向负责同工索取。密码只输一次，之后这台设备会记住。</span></div>
+      </li>
+    </ul>
+    <p class="note">选错了也没关系，界面右上角有「切换身份」可以随时改。</p>
+  </div>
+
+</div>
+
+<script src="vendor/qrcode.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  /* ── 入口地址：从当前页面推算，绝不写死域名 ──
+     本地是 http://localhost:8080/index.html，
+     GitHub Pages 是 https://用户名.github.io/仓库名/index.html。 */
+  var entryUrl = new URL('index.html', location.href).href;
+  var opUrl = entryUrl + '?mode=operator';
+
+  var linkEl = document.getElementById('entry-link');
+  linkEl.textContent = entryUrl;
+  linkEl.href = entryUrl;
+  document.getElementById('op-link').textContent = opUrl;
+
+  /* ── 二维码（本地生成，不联网）── */
+  try {
+    document.getElementById('qr').innerHTML = window.QRCode.toSVG(entryUrl, { size: 220, margin: 3 });
+  } catch (err) {
+    document.getElementById('qr').textContent = '二维码生成失败，请直接用下面的链接。';
+  }
+
+  /* ── 复制链接 ── */
+  var copyBtn = document.getElementById('copy-btn');
+  copyBtn.addEventListener('click', function () {
+    function done() {
+      var old = copyBtn.textContent;
+      copyBtn.textContent = '✓ 已复制';
+      setTimeout(function () { copyBtn.textContent = old; }, 1600);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(entryUrl).then(done, fallback);
+    } else { fallback(); }
+
+    function fallback() {
+      // 老浏览器 / 非安全上下文：用临时输入框兜底
+      var input = document.createElement('input');
+      input.value = entryUrl;
+      input.style.position = 'fixed';
+      input.style.opacity = '0';
+      document.body.appendChild(input);
+      input.select();
+      try { document.execCommand('copy'); done(); } catch (e) {}
+      document.body.removeChild(input);
+    }
+  });
+
+  document.getElementById('open-btn').addEventListener('click', function () {
+    location.href = entryUrl;
+  });
+
+  /* ── 平台识别：只显示当前平台的步骤 ── */
+  var ua = navigator.userAgent || '';
+  var isIOS = /iPad|iPhone|iPod/.test(ua) ||
+              (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPadOS 伪装成 Mac
+  var isAndroid = /Android/i.test(ua);
+
+  document.getElementById(isIOS ? 'steps-ios' : isAndroid ? 'steps-android' : 'steps-desktop')
+    .hidden = false;
+
+  /* ── 微信 / QQ 等内置浏览器：没有「添加到主屏幕」，必须提示外部打开 ──
+     这是实际分发时最主要的失败原因。 */
+  var inApp = /MicroMessenger/i.test(ua) || /\bQQ\//i.test(ua) || /QQBrowser/i.test(ua) ||
+              /Weibo/i.test(ua) || /DingTalk/i.test(ua) || /FBAN|FBAV|Instagram|Line\//i.test(ua);
+  if (inApp) {
+    document.getElementById('warn-hint').textContent = isIOS ? '在 Safari 中打开' : '在浏览器中打开';
+    document.getElementById('browser-warn').classList.add('show');
+  }
+
+  /* ── 安卓安装按钮：存下 beforeinstallprompt，点按钮时再触发 ── */
+  var deferredPrompt = null;
+  var installBtn = document.getElementById('install-btn');
+
+  var standalone = window.matchMedia('(display-mode: standalone)').matches ||
+                   window.navigator.standalone === true;
+
+  window.addEventListener('beforeinstallprompt', function (event) {
+    event.preventDefault();          // 拦下浏览器自带的提示条，改由按钮触发
+    if (standalone) return;          // 已经是装好的形态就别再提示
+    deferredPrompt = event;
+    installBtn.style.display = 'block';
+  });
+
+  installBtn.addEventListener('click', function () {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    deferredPrompt.userChoice.then(function () {
+      deferredPrompt = null;
+      installBtn.style.display = 'none';
+    });
+  });
+
+  window.addEventListener('appinstalled', function () {
+    deferredPrompt = null;
+    installBtn.style.display = 'none';
+  });
+
+  /* 已经在主屏幕形态下打开这页：安装步骤没意义 */
+  if (standalone) {
+    ['steps-ios', 'steps-android', 'steps-desktop'].forEach(function (id) {
+      document.getElementById(id).hidden = true;
+    });
+  }
+
+  /* ── Service Worker：相对路径 scope ── */
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js', { scope: './' }).catch(function () {});
+    });
+  }
+})();
+</script>
+</body>
+</html>

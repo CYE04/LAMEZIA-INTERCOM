@@ -603,7 +603,7 @@ export class WorshipRoom {
 export default {
   async fetch(request, env) {
     if (request.method === 'OPTIONS') {
-      return new Response(null, { headers: corsHeaders() });
+      return new Response(null, { headers: corsHeaders({}, request, env) });
     }
 
     const url = new URL(request.url);
@@ -624,6 +624,17 @@ export default {
       return htmlHealthPage(request);
     }
 
+    // 来源白名单只挡浏览器发起的跨站连接（健康检查页不限制，方便部署后自查）
+    const origin = request.headers.get('Origin');
+    if (!isAllowedOrigin(origin, env)) {
+      return json({
+        ok: false,
+        error: 'origin_not_allowed',
+        message: '这个来源不在 ALLOWED_ORIGINS 里，请检查 worker/wrangler.toml',
+        origin,
+      }, 403);
+    }
+
     if (!env.ROOM) {
       return json({
         ok: false,
@@ -642,13 +653,39 @@ export default {
 };
 
 // ── Utils ────────────────────────────────────────────────────
-function corsHeaders(extra = {}) {
-  return {
-    'Access-Control-Allow-Origin': '*',
+// 允许的来源：wrangler.toml 的 ALLOWED_ORIGINS（逗号分隔）+ 任意端口的 localhost / 127.0.0.1。
+//
+// 注意边界：浏览器对 WebSocket 不做 CORS 拦截，所以这里的收紧只能挡住「别的网站用浏览器
+// 驱动你的房间」，挡不住 curl / 脚本这类非浏览器客户端（它们根本不发 Origin）。
+// 真正的权限边界是 OPERATOR_KEY，不是这个。
+function isAllowedOrigin(origin, env) {
+  if (!origin) return true; // 非浏览器客户端不发 Origin，放行（挡它没意义，见上）
+
+  let parsed;
+  try { parsed = new URL(origin); } catch { return false; }
+
+  if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') return true;
+
+  const allowed = String((env && env.ALLOWED_ORIGINS) || '')
+    .split(',')
+    .map((s) => s.trim().replace(/\/+$/, ''))
+    .filter(Boolean);
+
+  return allowed.indexOf(parsed.origin) >= 0;
+}
+
+function corsHeaders(extra = {}, request, env) {
+  const origin = request && request.headers.get('Origin');
+  const headers = {
     'Access-Control-Allow-Headers': 'Content-Type, Upgrade, Connection',
     'Access-Control-Allow-Methods': 'GET, OPTIONS',
+    Vary: 'Origin',
     ...extra,
   };
+
+  // 只回显通过白名单的来源，不再无脑 '*'
+  if (origin && isAllowedOrigin(origin, env)) headers['Access-Control-Allow-Origin'] = origin;
+  return headers;
 }
 
 function json(data, status = 200) {

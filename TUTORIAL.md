@@ -1,161 +1,228 @@
-# CECP 敬拜团内通系统 v2 — 部署与嵌入说明
+# LAMEZIA 敬拜内通 — 技术说明
+
+面向要改代码的人。只想部署的话看 [README.md](README.md) 就够了。
+
+本项目是 CECP 敬拜团内通的独立分支：独立的 Cloudflare 账号、独立仓库、独立 Pages。
+与原项目最大的结构差异是 **单一入口**：不再有三个页面三个链接，
+只有一个 `index.html`，进去先选身份（敬拜团 / 音控组），音控组要密码。
+
+---
+
+## 1. 结构总览
 
 ```text
-cecp-intercom/
-├── cecp.js        ← 前端（单文件 Web Component，样式内置，零依赖零构建）
-├── cecp.css       ← v1 遗留文件，v2 不再需要（保留仅为避免旧页面 404）
-├── TUTORIAL.md    ← 本文档
-├── CHANGELOG.md   ← v2 协议新增字段说明
-└── worker/        ← Cloudflare Worker 后端（Durable Object 房间）
-    ├── index.js
-    ├── package.json
-    └── wrangler.toml
+index.html          单一入口。挂 <cecp-intercom data-mode="menu">，身份在组件内部选
+install.html        发给同工的引导页：二维码 + 分平台步骤 + 内置浏览器警告
+config.js           ★ 全站配置，唯一需要改的地方
+cecp.js             全部界面与协议逻辑（单文件 Web Component，样式在 Shadow DOM 内）
+cecp.css            v1 遗留文件，v2 完全不用（保留仅为避免旧页面 404）
+manifest.json       PWA 清单
+sw.js               Service Worker，cache-first + 手动 CACHE_VERSION
+icons/              PNG 图标，由 tools/make-icons.py 生成
+vendor/qrcode.js    自带的 QR 生成器（不走 CDN）
+tools/              构建期脚本，不参与运行时
+worker/             Cloudflare Worker + Durable Object
 ```
 
-## 1. 后端部署（Cloudflare Worker）
+**没有构建步骤。** 所有前端文件浏览器直接能跑，改完刷新即可。
 
-```bash
-cd cecp-intercom/worker
-npm install          # 首次需要（安装 wrangler）
-npx wrangler login   # 首次需要（浏览器授权）
-npx wrangler deploy
-```
+---
 
-部署后得到地址（当前线上为）：
+## 2. 相对路径（最容易踩的坑）
+
+GitHub Pages 把站点挂在 `/<仓库名>/` 子路径下，
+比如 `https://cye04.github.io/LAMEZIA-INTERCOM/`。
+
+**任何以 `/` 开头的绝对路径都会 404。** 本项目已全部处理：
+
+| 位置 | 写法 |
+|---|---|
+| `index.html` / `install.html` 引脚本、图标、manifest | `config.js`、`icons/…`、`manifest.json` |
+| `manifest.json` 的 `start_url` / `scope` / `icons.src` | `./index.html`、`./`、`icons/…` |
+| `sw.js` 的预缓存列表 | 全部 `./…` |
+| Service Worker 注册 | `register('sw.js', { scope: './' })` |
+| `install.html` 里的入口网址 | `new URL('index.html', location.href).href` |
+
+改代码时保持这个习惯。本地 `python3 -m http.server`（根路径）和
+Pages（子路径）两种情况都要能跑。
+
+### localStorage 命名空间
+
+`cecp.js` 的存储键默认带 `location.pathname`。这在单入口 + PWA 下会出问题：
+装到主屏幕后启动地址是 `./index.html`，而直接打开可能是目录根 `/仓库名/`，
+两者 pathname 不同 → 被当成两份独立存档 → 音控要重输密码、成员要重选设备。
+
+所以 `index.html` 显式传了固定的 `data-page-key`（来自 `config.js` 的 `STORE_KEY`），
+不让它跟着路径走。**不要去掉这个属性。**
+
+> 顺带说明：三个页面时代靠 `data-page-key` 做角色隔离，单入口后不再需要——
+> 各角色用的存储后缀本来就不重叠（音控是 `opkey` / `opmute`，
+> 成员是 `name` / `person` / `req:*` / `chat`），不会互相污染。
+
+---
+
+## 3. 身份与记忆
 
 ```text
-https://cecp-ws.cecp.workers.dev
+index.html 决定 data-auto-role ──► cecp.js boot()
+      │                                  │
+      │ ?mode=operator / ?mode=client     ├─ 有 auto-role 且条件满足 → 直接进对应界面
+      │ 或 localStorage 里上次的身份       └─ 否则 → 显示角色选择页
+      │
+      └── 监听组件抛出的 cecp:role / cecp:switch-identity 事件来更新记忆
 ```
 
-前端要写成 WebSocket 形式：`wss://cecp-ws.cecp.workers.dev`。
-打开 https 地址可看到健康检查页；`/health` 返回 JSON。
+- **`?mode=operator`**：跳过选择页直接进音控台，适合调音台电脑存书签。
+  同时会被记住，之后不带参数打开也直达。
+- **记忆清除**：点「切换身份」或从密码框点「返回」，都会回到选择页并忘掉记忆。
+- **音控自动登录**：只在本机已存有验证通过的密钥时才发生。
+  密钥失效（比如换了密码）会自动退回密码框并给出提示。
 
-> v2 的 worker 对 v1 前端完全向后兼容，可先于前端上线。
+组件对外抛的两个事件：
 
-**设置音控密码（合体入口的音控组用）**：密码只存在服务器，不进代码仓库、不进网页源码。
-
-```bash
-cd cecp-intercom/worker
-npx wrangler secret put OP_PIN   # 按提示输入密码，例如 3234
-```
-
-设完就立即生效（不必重新 deploy）。不设的话音控组入口不设防。以后改密码重跑这条命令即可。
-
-## 2. 前端地址（GitHub Pages）
-
-```text
-https://cye04.github.io/Cecp/cecp-intercom/cecp.js
-```
-
-改完代码 `git push` 即发布，无需构建。**只需引入这一个 JS 文件，不需要再引 cecp.css。**
-
-## 3. 三端嵌入
-
-### 3.0 合体入口（推荐对外只公开这一个链接）
-
-一个链接，进去先选「敬拜团 / 音控组」。敬拜团直接进；音控组要输密码（防止随便谁点进音控台踢人/发广播）。做成一个单独页面即可（自动全屏 + 内部滚动 + 跟随系统深浅色）：
-
-```html
-<!doctype html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"></head>
-<body>
-<cecp-intercom
-  data-ws-url="wss://cecp-ws.cecp.workers.dev"
-  data-mode="menu"></cecp-intercom>
-<script src="https://cye04.github.io/Cecp/cecp-intercom/cecp.js"></script>
-</body></html>
-```
-
-- `data-mode="menu"` 默认全屏铺满页面、内容超高可内部滚动。
-- 音控密码**存在服务器上**（`OP_PIN`，见 §1），网页源码里翻不到——见下方部署步骤。**没设 `OP_PIN` 时音控组入口不设防**（向后兼容）。
-- 下面 3.1 / 3.2 的单独 `client` / `operator` 链接仍然可用，作为备用，不公开即可。
-
-### 3.1 敬拜端（成员，手机）
-
-```html
-<cecp-intercom
-  data-ws-url="wss://cecp-ws.cecp.workers.dev"
-  data-mode="client"></cecp-intercom>
-<script src="https://cye04.github.io/Cecp/cecp-intercom/cecp.js"></script>
-```
-
-进入后选设备 + 填名字；快捷信息按「我的耳返 / 耳返里的声部 / 话筒设备 / 流程求助」四组展示，点一下即发；「聊天」Tab 是成员群聊。发出的请求会实时回填音控标记的状态（待处理/处理中/已解决）。
-
-### 3.2 音控端（调音台，桌面）
-
-```html
-<cecp-intercom
-  data-ws-url="wss://cecp-ws.cecp.workers.dev"
-  data-mode="operator"></cecp-intercom>
-<script src="https://cye04.github.io/Cecp/cecp-intercom/cecp.js"></script>
-```
-
-音控台功能：
-
-- **请求看板**：按声部分组（话筒/人声、键盘、吉他、贝斯、鼓、其它/流程），组头带未处理角标；每条请求可一键标记 待处理/处理中/已解决（同步到成员端和其它音控端）；已解决默认收起。
-- **高优先级警报**：啸叫/爆音/话筒没声/故障类请求全局置顶红框，到达时响声+震动，面板边框持续闪烁直到标记已解决；🔔 按钮一键静音（只关声震，不关视觉）。
-- **定向回复**：点请求上的「回复」，预设短语或手输，只发给该成员。
-- **广播**：预设词 + 手输；顶部成员 chips 可勾选定向（默认「全体（含 youth）」）。
-- 在线设备列表（踢单个/全员）、统计卡、每日午夜（罗马时区）自动清场。
-
-### 3.3 youth 页面（青年聚会，被动接收 + 可升级）
-
-在 youth 帖子/页面里追加：
-
-```html
-<cecp-intercom
-  data-ws-url="wss://cecp-ws.cecp.workers.dev"
-  data-mode="auto"></cecp-intercom>
-<script src="https://cye04.github.io/Cecp/cecp-intercom/cecp.js"></script>
-```
-
-- 页面加载即以 **listener** 身份静默连接：不弹窗、不选身份，音控广播到达时悬浮球所在角弹 toast。
-- **四角停靠 + 自动避让**：悬浮球可停四个角，初始化时自动避开「工具导游」（`rt5` 系触发器，硬规则永不同角）和回到顶部按钮、footer FAB 等固定元素（软避让，纵向让位）；面板标题栏的方格按钮可手动换角，选择会记住。显式钉死用 `data-corner="bottom-right"` 等。
-- 用户点开悬浮球 → 选设备身份 → 原地升级为正式成员，之后能完整收发。
-- 青年聚会想用独立房间（不和主日混）就加 `data-room="youth"`，音控端也开同样的 room 即可。
-- 样式在 Shadow DOM 内，与 youth-engine 的全局样式互不影响；可与其共存于同一页面。
-
-### 3.4 旧写法（v1 兼容，仍可用）
-
-```html
-<div id="cecp-root" data-ws-url="wss://…" data-mode="client"></div>
-<script src="https://cye04.github.io/Cecp/cecp-intercom/cecp.js"></script>
-```
-
-## 4. 全部属性
-
-| 属性 | 默认 | 说明 |
+| 事件 | 时机 | 宿主页面用途 |
 |---|---|---|
-| `data-ws-url` | （必填） | Worker 的 wss 地址 |
-| `data-mode` | `client` | `menu`（合体入口，选角色）/ `operator` / `client` / `listener` / `auto`（auto=先被动收听，点开再升级） |
-| `data-fullscreen` | menu 默认开 | `1` 铺满整个视口 + 内部滚动（单独页面用）；`0` 关闭。其它模式默认关 |
-| `data-room` | `cecp-main` | 房间名（字母/数字/`_`/`-`，≤64）；不同房间完全隔离 |
-| `data-layout` | 视 mode | `page`（填满容器）/ `floating`（悬浮球）；listener/auto 默认 floating |
-| `data-presets` | 内置 15 个 | JSON 数组，覆写设备身份列表 |
-| `data-cues` | 内置 4 组 | JSON。扁平 `[{kind,icon,label,desc,priority}]` 或分组 `[{label,cues:[…]}]`；`priority:"high"` 触发音控警报 |
-| `data-broadcast-presets` | 内置 5 个 | JSON 数组，音控广播快捷词 |
-| `data-widget-title` | CECP 敬拜团内通 | 悬浮面板标题 |
-| `data-corner` | 自动避让 | 四角停靠：`top-left` / `top-right` / `bottom-left` / `bottom-right`；不指定则「上次选择 → 自动挑空角」。旧 `data-float-side` 仍兼容（映射到底部两角） |
-| `data-float-right` / `-bottom` | 20px / 自动 | 离停靠角的偏移；`-bottom` 不指定时自动按角落固定元素高度让位 |
-| `data-launcher-icon` / `-label` | 内置声波耳机 SVG / 调音助手 | 给 emoji 则替换内置图标（内置 SVG 才有呼吸动效）；`-label` 是无障碍标签 |
-| `data-default-preset` | — | 自动选中的设备名 |
-| `data-page-key` | 页面路径 | localStorage 隔离键（同页多实例时必须各不相同） |
-| `data-member-chat` | 开 | `"0"` 关闭成员群聊 |
-| `data-theme` | 自动探测 | `light` / `dark` 强制主题 |
+| `cecp:role` | 进入某身份 / 回到选择页，`detail.role` 为 `'operator'`/`'client'`/`null` | 记住身份、开关 Screen Wake Lock |
+| `cecp:switch-identity` | 点了「切换身份」 | 把 `?mode=` 从地址栏去掉 |
 
-JS API：`window.CECPIntercom.mount(elOrSelector)` → `{ open, close, destroy }`。
+---
 
-## 5. 验证方法
+## 4. 音控鉴权
 
-1. 打开音控端 + 成员端各一个页面。
-2. 成员发「有啸叫回授」→ 音控看板置顶红框 + 响声震动 + 边框闪烁。
-3. 音控标「处理中」→ 成员端该条变蓝；标「已解决」→ 变绿淡化、警报停止。
-4. 音控点「回复」发「好了」→ 只有该成员弹横幅。
-5. 音控勾选某成员再广播 → 只有他收到；不勾 → 全体（含 youth 页 toast）。
-6. 断网再恢复 → 顶部红条「正在自动重连」自动消失并提示「已重新连接 ✓」。
+**权限判断全部在服务端。** 前端只负责收集密码和展示结果。
 
-## 6. 已知兼容性
+```text
+用户输密码
+   └─► register { role:'operator', key:'…' }   （走消息体，不走 URL 查询串）
+          └─► worker 比对 env.OPERATOR_KEY（定长比较）
+                 ├─ 通过 → attachment 记 opAuth=true，回 ack
+                 └─ 失败 → 回 op_denied + close 4001，前端清掉本地密钥并提示
+```
 
-- 需要支持 Custom Elements + Shadow DOM 的浏览器（2020 年后的均可）。
-- 音控台三栏在 iOS 16+/新浏览器按面板宽度自适应（容器查询）；更老的设备按视口宽度降级堆叠。
-- iOS Safari：输入框已固定 16px 防聚焦放大；震动 API 不可用时静默跳过。
+要点：
+
+- **fail closed**：`OPERATOR_KEY` 没配置时一律拒绝（`reason: not_configured`），
+  不存在「没配就放行」。
+- 密钥也可以走握手 `?key=`（存书签用），失败时直接 HTTP 401，
+  连 WebSocket 都不建立。
+  > 为什么这条路径不用 4001：workerd 里在 `fetch` 上下文中对已 accept 的
+  > WebSocket 调 `close()` 会静默失效（返回正常、`readyState=2`，但 close frame
+  > 到不了客户端），客户端只会干等。前端因此默认走 register 那条路径。
+- 连续失败递增延迟（250ms × 次数，上限 2s）并断开，重试需重新握手。
+- **`client` / `listener` 无需凭据**。拿到链接就能以敬拜团身份连接。
+  这是刻意的取舍；要加房间级密钥的话需要另外实现。
+
+设置 / 更换密码：
+
+```bash
+cd worker && npx wrangler secret put OPERATOR_KEY
+```
+
+---
+
+## 5. 配置项
+
+`config.js`：
+
+| 键 | 说明 |
+|---|---|
+| `WS_URL` | ★ Worker 的 wss 地址，部署后必填 |
+| `ROOM` | 房间名，要和 `worker/wrangler.toml` 的默认值一致 |
+| `APP_NAME` | 界面上显示的名称，各处标题都读它 |
+| `STORE_KEY` | localStorage 命名空间，固定值，别改成跟路径走 |
+| `ROLE_KEY` | 记住身份用的键名 |
+
+`worker/wrangler.toml`：
+
+| 键 | 说明 |
+|---|---|
+| `name` | Worker 名，决定 `*.workers.dev` 的子域 |
+| `ALLOWED_ORIGINS` | 允许连接的来源，逗号分隔；localhost 任意端口自动放行 |
+| `DAILY_RESET_TZ` | 每日凌晨清理的时区 |
+
+> CORS 的边界：浏览器对 WebSocket 不做 CORS 拦截，
+> 所以这项只能挡「别的网站用浏览器驱动你的房间」，挡不住 curl 这类脚本
+> （它们根本不发 Origin）。真正的权限边界是 `OPERATOR_KEY`。
+
+---
+
+## 6. 组件属性（`cecp.js`）
+
+`index.html` 用到的：
+
+| 属性 | 说明 |
+|---|---|
+| `data-ws-url` | 必填，Worker 的 wss 地址 |
+| `data-room` | 房间名 |
+| `data-mode` | 本项目固定 `menu`（合体入口） |
+| `data-app-name` | 教会 / 应用名，菜单页、成员端、音控台标题统一读它 |
+| `data-page-key` | localStorage 命名空间，务必固定 |
+| `data-auto-role` | `operator` / `client`，跳过选择页直达（由入口页写入） |
+
+其余仍然支持但本项目没用到：`data-layout`、`data-presets`、`data-cues`、
+`data-broadcast-presets`、`data-theme`、`data-corner`、`data-member-chat` 等，
+说明见 `cecp.js` 顶部注释。
+
+设备列表默认是 `话筒1`–`话筒8` + 钢琴 / 键盘 / 吉他 / 电吉他 / 贝斯 / 鼓。
+要改的话既可以改 `cecp.js` 里的 `DEFAULT_PRESETS`，
+也可以在 `index.html` 上加 `data-presets='["…","…"]'` 覆盖。
+
+---
+
+## 7. PWA
+
+- `manifest.json`：`display: standalone`，`start_url` 用 `./index.html`。
+  单入口所以只需要一个 manifest。
+- `sw.js`：静态资源 cache-first。**完全不碰 WebSocket** —— WS 不经过 `fetch` 事件，
+  Service Worker 里也显式跳过非 GET、跨域、非 http(s) 的请求。
+- **改前端后必须手动把 `CACHE_VERSION` 加 1**，否则老用户拿不到更新。
+- 图标：`python3 tools/make-icons.py`（纯标准库，不需要装任何东西）。
+  `tools/icon.svg` 是同参数的矢量版，给设计师用；改了要同步改脚本再重新生成。
+
+---
+
+## 8. 本地验证
+
+```bash
+# 后端（另开一个终端）
+cd worker && npx wrangler dev --port 8787 --local
+```
+
+本地跑后端需要在 `worker/.dev.vars` 里放测试密钥（该文件已被 `.gitignore` 忽略）：
+
+```text
+OPERATOR_KEY = "你的测试密码"
+```
+
+前端要**同时验证根路径和子路径**：
+
+```bash
+# 根路径：http://localhost:8080/
+python3 -m http.server 8080
+
+# 子路径：http://localhost:8081/<本文件夹名>/  ← 模拟 GitHub Pages
+cd .. && python3 -m http.server 8081
+```
+
+检查项：
+
+- [ ] 角色选择页正常显示
+- [ ] 音控组：错密码有红字提示，对密码进看板
+- [ ] 刷新后直达上次身份，「切换身份」能回到选择页
+- [ ] `?mode=operator` 直达音控台
+- [ ] 敬拜团能选设备、填名字、显示「在线」
+- [ ] DevTools → Application → Service Workers 里 scope 带子路径
+- [ ] `install.html` 二维码扫出来是入口页地址
+
+---
+
+## 9. 已知边界
+
+- Screen Wake Lock 需要 https（或 localhost）；不支持的浏览器静默跳过。
+- iOS 的「添加到主屏幕」只有 Safari 有；微信 / QQ 内置浏览器没有，
+  `install.html` 会检测并提示。
+- QR 生成器支持版本 1–10、纠错等级 M、字节模式，放 URL 绰绰有余；
+  超长内容会抛错。
+- 保留未改名的标识符：`window.CECPIntercom`、`window.__CECP_INTERCOM_V2__`、
+  自定义元素 `<cecp-intercom>`、文件名 `cecp.js`、localStorage 前缀 `cecp2:`。
+  它们是代码标识符不是界面文案，改名会影响已有嵌入写法和已存状态。

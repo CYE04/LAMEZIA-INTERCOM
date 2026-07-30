@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<!-- viewport-fit=cover：配合 cecp.js 里的 env(safe-area-inset-*)，适配刘海屏和底部手势条 -->
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#f5f5f7" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#161617" media="(prefers-color-scheme: dark)">
+<title>LAMEZIA 敬拜内通</title>
+
+<!-- PWA：全部相对路径，GitHub Pages 挂在 /<仓库名>/ 子路径下也能解析 -->
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icons/icon-192.png" sizes="192x192" type="image/png">
+
+<!-- iOS 需要的一组：加到主屏幕后全屏运行、状态栏样式、桌面图标 -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="敬拜内通">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<style>
+  html, body {
+    margin: 0;
+    height: 100%;
+    background: #f5f5f7;
+    overscroll-behavior: none;           /* 关掉整页下拉回弹，避免误触刷新 */
+  }
+  @media (prefers-color-scheme: dark) {
+    html, body { background: #161617; }
+  }
+  /* 配置没填时的提示（正常情况下看不到） */
+  .cfg-warn {
+    margin: 0; padding: 16px 18px;
+    font: 15px/1.6 system-ui, -apple-system, "Noto Sans SC", sans-serif;
+    background: #fff3cd; color: #7a5c00; border-bottom: 1px solid #f0dda0;
+    padding-top: calc(16px + env(safe-area-inset-top, 0px));
+  }
+  .cfg-warn code { background: rgba(0,0,0,.07); padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+
+<script src="config.js"></script>
+<script>
+(function () {
+  'use strict';
+
+  var CFG = window.LAMEZIA_CONFIG || {};
+  var query = new URLSearchParams(location.search);
+
+  /* ── 配置没填就直接说清楚，别让用户对着一个连不上的界面猜 ── */
+  if (!CFG.WS_URL || CFG.WS_URL.indexOf('REPLACE-ME') >= 0) {
+    var warn = document.createElement('p');
+    warn.className = 'cfg-warn';
+    warn.innerHTML = '⚠️ 还没填服务器地址：请打开 <code>config.js</code>，'
+      + '把 <code>WS_URL</code> 改成部署 worker 后拿到的 <code>wss://…workers.dev</code> 地址。';
+    document.body.appendChild(warn);
+  }
+
+  /* ── 身份记忆 ──────────────────────────────────────────────
+     ?mode= 优先（音控台电脑存书签用），其次上次记住的身份。
+     只认 operator / client，其它一律回角色选择页。            */
+  var ROLE_KEY = CFG.ROLE_KEY || 'lamezia:last-role';
+
+  function readRole(value) {
+    value = String(value || '').trim().toLowerCase();
+    return (value === 'operator' || value === 'client') ? value : '';
+  }
+
+  function lsGet(k) { try { return localStorage.getItem(k) || ''; } catch (e) { return ''; } }
+  function lsSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+  function lsDel(k) { try { localStorage.removeItem(k); } catch (e) {} }
+
+  var urlRole = readRole(query.get('mode'));
+  var autoRole = urlRole || readRole(lsGet(ROLE_KEY));
+
+  /* 从 URL 指定身份时也记住，下次不带参数打开仍然直达 */
+  if (urlRole) lsSet(ROLE_KEY, urlRole);
+
+  /* ── 挂载组件 ──────────────────────────────────────────── */
+  var el = document.createElement('cecp-intercom');
+  el.setAttribute('data-ws-url', CFG.WS_URL || '');
+  el.setAttribute('data-room', readRoom(query.get('room')) || CFG.ROOM || 'lamezia');
+  el.setAttribute('data-app-name', CFG.APP_NAME || 'LAMEZIA 敬拜内通');
+  el.setAttribute('data-mode', 'menu');           // 永远是合体入口，身份在组件内选
+  el.setAttribute('data-page-key', CFG.STORE_KEY || 'lamezia');
+  if (autoRole) el.setAttribute('data-auto-role', autoRole);
+  document.body.appendChild(el);
+
+  function readRoom(value) {
+    value = String(value || '').trim();
+    return /^[\w-]{1,64}$/.test(value) ? value : '';
+  }
+
+  /* ── 记住 / 忘记身份 ───────────────────────────────────── */
+  /* 进入某个身份就记住；回到角色选择页（role 为空）就忘掉 ——
+     否则从密码框点「返回」后刷新，又会被带回密码框。 */
+  el.addEventListener('cecp:role', function (event) {
+    var role = readRole(event.detail && event.detail.role);
+    if (role) lsSet(ROLE_KEY, role);
+    else lsDel(ROLE_KEY);
+    syncWakeLock(role === 'operator');
+  });
+
+  /* 点了「切换身份」还要把 ?mode= 从地址栏去掉，
+     否则刷新后又被 URL 参数带回原来的身份 */
+  el.addEventListener('cecp:switch-identity', function () {
+    if (query.has('mode')) {
+      query.delete('mode');
+      var rest = query.toString();
+      history.replaceState(null, '', location.pathname + (rest ? '?' + rest : ''));
+    }
+  });
+
+  /* ── Screen Wake Lock：音控台设备别息屏 ───────────────────
+     API 不支持（iOS Safari 16.4 以下、非 https 等）就静默跳过。 */
+  var wakeLock = null;
+  var wantWakeLock = false;
+
+  function syncWakeLock(want) {
+    wantWakeLock = !!want;
+    if (wantWakeLock) acquireWakeLock();
+    else releaseWakeLock();
+  }
+
+  function acquireWakeLock() {
+    if (!('wakeLock' in navigator) || wakeLock || document.visibilityState !== 'visible') return;
+    try {
+      navigator.wakeLock.request('screen').then(function (lock) {
+        if (!wantWakeLock) { try { lock.release(); } catch (e) {} return; }
+        wakeLock = lock;
+        lock.addEventListener('release', function () { wakeLock = null; });
+      }).catch(function () { /* 用户拒绝 / 省电模式，静默跳过 */ });
+    } catch (e) {}
+  }
+
+  function releaseWakeLock() {
+    if (!wakeLock) return;
+    try { wakeLock.release(); } catch (e) {}
+    wakeLock = null;
+  }
+
+  /* 切到后台系统会自动释放，回到前台要重新申请 */
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible' && wantWakeLock) acquireWakeLock();
+  });
+
+  /* ── Service Worker ───────────────────────────────────────
+     scope 用相对路径 './'，GitHub Pages 子路径下才不会注册失败。
+     file:// 打开时 navigator.serviceWorker 不存在，静默跳过。      */
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+    window.addEventListener('load', function () {
+      navigator.serviceWorker.register('sw.js', { scope: './' })
+        .catch(function () { /* 注册失败不影响正常使用 */ });
+    });
+  }
+})();
+</script>
+<script src="cecp.js"></script>
+
+</body>
+</html>

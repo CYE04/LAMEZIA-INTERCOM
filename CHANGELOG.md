@@ -2,6 +2,58 @@
 
 > fork 自 CECP 敬拜团内通，供 Lamezia 教会独立部署（独立 Cloudflare 账号 / 仓库 / Pages）。
 
+## v3.0.0-lamezia.2（2026-07-30）单一入口 + PWA + 分发页
+
+### 新增文件
+
+| 文件 | 作用 |
+|---|---|
+| `index.html` | 单一入口页：挂 `<cecp-intercom data-mode="menu">`，身份记忆、`?mode=` 直达、Screen Wake Lock、SW 注册 |
+| `install.html` | 发给同工的安装引导页：二维码 + 分平台图文步骤 + 微信内置浏览器警告 + 复制链接 |
+| `config.js` | 全站配置集中化（`WS_URL` / `ROOM` / `APP_NAME` / `STORE_KEY` / `ROLE_KEY`） |
+| `manifest.json` | PWA 清单，`display: standalone`，全部相对路径 |
+| `sw.js` | Service Worker，静态资源 cache-first，`CACHE_VERSION` 手动 bump |
+| `icons/*.png` | 192 / 512 / maskable-512 / apple-touch-icon |
+| `vendor/qrcode.js` | 自带 QR 生成器（字节模式，版本 1–10，纠错 M），不走 CDN |
+| `tools/make-icons.py` | 纯 Python 标准库的图标生成器（手写 PNG 编码），构建期用 |
+| `tools/icon.svg` | 图标矢量源，参数与生成脚本一致 |
+| `README.md` | 面向非技术同工的部署清单 |
+| `.gitignore` | 新增（原本没有）；确保 `.dev.vars`、`.DS_Store`、`node_modules` 不进仓库 |
+
+### 删除
+
+- `intercom.html` — 旧的 CECP 单页入口，`data-ws-url` 指向 **CECP 教会的 worker**
+  （`wss://cecp-ws.cecp.workers.dev`）。留在仓库里会让扫到它的人连到另一个教会的房间，
+  且与新的 `index.html` 职责重复。
+
+### cecp.js 追加改动（承接上一版的清单，编号续排）
+
+| # | 位置 | 改动 |
+|---|---|---|
+| 13 | `readConfig` | 新增 `data-auto-role`，供入口页写入「记住的身份」 |
+| 14 | `boot()` 的 menu 分支 | 按 `autoRole` 直达对应界面；音控仅在本机已有验证过的密钥时才自动进（否则会闪一下空看板再弹密码框） |
+| 15 | 新增 `emit()` | 统一往宿主元素派发 `cecp:*` 事件，避免宿主页面去翻 Shadow DOM |
+| 16 | 新增 `switchIdentity()` + `switch-identity` action | 「切换身份」：回角色选择页并通知宿主忘掉记忆 |
+| 17 | `backToMenu()` / `showOperator()` / `showClient()` / `showSetup()` | 派发 `cecp:role`，宿主据此记住身份、开关 Wake Lock |
+| 18 | 成员端与音控台头部 | 增加「切换身份」按钮（仅 menu 模式显示） |
+| 19 | `.cf.is-page.is-fullscreen` 样式 | `inset:0` 改为四边 `env(safe-area-inset-*)`，适配刘海屏与底部手势条；上下都锚定后不再需要 `100dvh` |
+
+### worker 追加改动
+
+- `wrangler.toml`：`name` 改为 `ws-lamezia`；新增 `[vars]` 段的 `ALLOWED_ORIGINS`、`DAILY_RESET_TZ`。
+- CORS 从 `Access-Control-Allow-Origin: *` 改为按 `ALLOWED_ORIGINS` 白名单回显，
+  localhost / 127.0.0.1 任意端口自动放行；WebSocket 升级请求的 `Origin` 不在白名单时回 403。
+  > 边界说明：浏览器对 WebSocket 不做 CORS 拦截，此项只能挡「别的网站用浏览器驱动房间」，
+  > 挡不住不发 `Origin` 的脚本客户端。真正的权限边界仍是 `OPERATOR_KEY`。
+
+### 修正
+
+- **`vendor/qrcode.js` 格式信息副本写错**：第二份格式信息的左下竖列原本写了 8 位（bit 0–7），
+  但 `size-8` 那格是固定暗模块、不属于格式信息，导致 bit 7 被暗模块覆盖、两份副本不一致。
+  改为左下 7 位（bit 0–6）+ 右上 8 位（bit 7–14）。
+  （由「独立反向解码」测试发现——渲染出来看着正常，但扫描器读到的格式信息是坏的。）
+
+
 ## v3.0.0-lamezia.1（2026-07-30）音控鉴权收紧 + 改名
 
 ### ⚠️ 破坏性变更：必须配置 `OPERATOR_KEY`，否则没人能进音控台

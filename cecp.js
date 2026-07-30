@@ -4,7 +4,7 @@
    ------------------------------------------------------------
    嵌入方式（新）：
      <cecp-intercom
-        data-ws-url="wss://cecp-ws.xxx.workers.dev"
+        data-ws-url="wss://ws-lamezia.xxx.workers.dev"
         data-mode="client"></cecp-intercom>
      <script src="cecp.js"></script>
 
@@ -16,7 +16,7 @@
      data-ws-url            必填，Worker 的 wss 地址
      data-mode              operator | client | listener | auto（默认 client）
                             auto = 先以 listener 被动收广播，用户点开后选身份升级成 client
-     data-room              房间名（字母/数字/_-，默认 cecp-main）
+     data-room              房间名（字母/数字/_-，默认 lamezia）
      data-layout            page | floating（listener/auto 默认 floating，其余默认 page）
      data-presets           JSON 数组，覆写设备身份列表
      data-cues              JSON，覆写快捷信息。支持两种格式：
@@ -356,7 +356,9 @@
     '.cf.is-page .cf-panel{position:relative;width:100%;height:100%;min-height:520px;border-radius:var(--r-lg)}',
     '.cf.is-page{height:100%}',
     /* 单独页面全屏：铺满视口，内部自己滚 */
-    '.cf.is-page.is-fullscreen{position:fixed;inset:0;height:100vh;height:100dvh;z-index:2147483000}',
+    /* 铺满视口，但避开刘海 / 圆角 / 底部手势条（配合页面的 viewport-fit=cover）。
+       上下都锚定后高度自然确定，不需要再写 100dvh。 */
+    '.cf.is-page.is-fullscreen{position:fixed;top:env(safe-area-inset-top,0px);right:env(safe-area-inset-right,0px);bottom:env(safe-area-inset-bottom,0px);left:env(safe-area-inset-left,0px);z-index:2147483000}',
     '.cf.is-page.is-fullscreen .cf-panel{width:100%;height:100%;min-height:0;border-radius:0;border:none}',
     '.cf-stage{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}',
 
@@ -832,7 +834,7 @@
     this.configMode = mode;
 
     var room = String(d.room || '').trim();
-    this.room = /^[\w-]{1,64}$/.test(room) ? room : 'cecp-main';
+    this.room = /^[\w-]{1,64}$/.test(room) ? room : 'lamezia';
     this.wsFullUrl = this.wsUrl
       ? this.wsUrl + (this.wsUrl.indexOf('?') >= 0 ? '&' : '?') + 'room=' + encodeURIComponent(this.room)
       : '';
@@ -848,6 +850,8 @@
     this.bcastPresets = readPresetList(d.broadcastPresets, DEFAULT_BCAST_PRESETS);
     this.launcherIcon = String(d.launcherIcon || '🎧');
     this.launcherLabel = String(d.launcherLabel || '调音助手');
+    /* menu 模式下「记住上次身份」：宿主页面把上次选的角色写进来，直接跳过角色选择页 */
+    this.autoRole = String(d.autoRole || '').trim().toLowerCase();
     /* 教会名统一走 data-app-name（config.js 里改一处即可），不再散落在各界面里 */
     this.appName = String(d.appName || 'LAMEZIA 敬拜内通').trim() || 'LAMEZIA 敬拜内通';
     this.widgetTitle = String(d.widgetTitle || this.appName);
@@ -1305,6 +1309,7 @@
         break;
       case 'op-pin-submit': this.enterOperator(); break;
       case 'back-menu': this.backToMenu(); break;
+      case 'switch-identity': this.switchIdentity(); break;
       case 'tab': this.switchTab(el.dataset.tab || 'cues'); break;
       case 'cue': this.sendCue(el); break;
       case 'send-custom': this.sendCustom(el); break;
@@ -1363,6 +1368,25 @@
     if (this.isFloating) this.initDock();
 
     if (this.configMode === 'menu') {
+      /* 记住的身份：音控必须已有验证过的密钥才自动进（否则会闪一下空看板再弹密码框） */
+      if (this.autoRole === 'operator' && this.opKey) {
+        this.enterOperator(this.opKey);
+        return;
+      }
+      if (this.autoRole === 'client') {
+        var rememberedName = lsGet(this.storeKey('name'));
+        if (rememberedName) {
+          this.whoAmI = rememberedName;
+          this.role = 'client';
+          this.loadHistory();
+          this.showClient();
+          this.connect();
+        } else {
+          this.role = null;
+          this.showSetup();
+        }
+        return;
+      }
       /* 合体入口：先选角色，不预连接 */
       this.showMenu();
       return;
@@ -2011,10 +2035,29 @@
     this.pendingOpPin = '';
     this.role = null;
     this.stopConnection();
+    this.emit('role', { role: null });
     this.showMenu();
   };
 
+  /* 「切换身份」：除了回到角色选择，还要让宿主页面忘掉记住的身份，否则刷新又自动进回去 */
+  CecpApp.prototype.switchIdentity = function () {
+    this.emit('switch-identity', {});
+    this.backToMenu();
+  };
+
+  /* 宿主页面用的事件钩子（Wake Lock、记住身份都靠它，避免页面去翻 Shadow DOM） */
+  CecpApp.prototype.emit = function (name, detail) {
+    try {
+      this.host.dispatchEvent(new CustomEvent('cecp:' + name, {
+        detail: detail || {},
+        bubbles: true,
+        composed: true
+      }));
+    } catch (err) {}
+  };
+
   CecpApp.prototype.showSetup = function (errorText) {
+    this.emit('role', { role: 'client' });
     var self = this;
     var remembered = lsGet(this.storeKey('name'));
     this.setupSelected = this.presets.indexOf(getDeviceFromDisplayName(remembered)) >= 0
@@ -2202,6 +2245,7 @@
   ──────────────────────────────────────────── */
 
   CecpApp.prototype.showClient = function () {
+    this.emit('role', { role: 'client' });
     var self = this;
     this.activeTab = 'cues';
 
@@ -2211,6 +2255,7 @@
       + '<div class="cf-head-tools">'
       + this.statusHtml()
       + '<button class="cf-ghost-btn" type="button" data-action="reset-device">换设备</button>'
+      + (this.configMode === 'menu' ? '<button class="cf-ghost-btn" type="button" data-action="switch-identity">切换身份</button>' : '')
       + '</div>'
       + '</div>'
       + '<div class="cf-banner" role="status">'
@@ -2489,12 +2534,14 @@
   ──────────────────────────────────────────── */
 
   CecpApp.prototype.showOperator = function () {
+    this.emit('role', { role: 'operator' });
     var html = '<div class="cf-app is-operator cf-op">'
       + '<div class="cf-head">'
       + '  <div class="cf-head-copy"><span class="cf-head-title">' + esc(this.appName) + ' 音控台</span><span class="cf-head-sub">' + esc(this.room) + ' 房间 · 请求与群聊实时汇总</span></div>'
       + '  <div class="cf-head-tools">'
       + '    <span class="cf-clock">🕒 <span data-clock>--:--:--</span></span>'
       + (this.isFloating ? '' : '    <button class="cf-ghost-btn" type="button" data-action="fullscreen">进入全屏</button>')
+      + (this.configMode === 'menu' ? '<button class="cf-ghost-btn" type="button" data-action="switch-identity">切换身份</button>' : '')
       + this.statusHtml()
       + '  </div>'
       + '</div>'
