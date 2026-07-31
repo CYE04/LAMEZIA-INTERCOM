@@ -2,6 +2,58 @@
 
 > fork 自 CECP 敬拜团内通，供 Lamezia 教会独立部署（独立 Cloudflare 账号 / 仓库 / Pages）。
 
+## v3.0.0-lamezia.3（2026-07-31）合并 CECP 的现场模式（live）
+
+从 CECP 上游同步。合并方式：**以 CECP 新版 `cecp.js` 为基底，把本项目的 19 处改动逐条重打上去**
+（而不是把上游的差异往本地文件上挑），这样能一并拿到上游的全部改动，
+且本地改动清单是已知的、可逐条核对。
+
+### 从上游拿到的
+
+- **现场模式（live）**：谱 + 内通同屏。段落 cue（前奏 / 主歌 / 预副歌 / 副歌 / 桥段 / 间奏 / 尾声）、
+  曲库选歌、缩放、上一首 / 下一首、原图与移调切换、内嵌音频。
+  合体入口选「敬拜团」后默认进这个界面（`data-menu-live="0"` 可退回纯内通界面）。
+- **共享歌单**：任何已注册的人都能改，改完服务端广播给全房间并持久化。
+- 上游 `cecp.js` 的其余改动一并带入。
+
+### worker：只挑了 `setlist_set`
+
+**上游 worker 仍是旧的 fail-open `OP_PIN` 逻辑**（密钥没配置就放行），
+所以没有整份覆盖，只移植了 `setlist_set` 这一个消息类型 + `_sendSetlistTo`
++ `SETLIST_KEY` / `SETLIST_MAX`，本项目的 fail-closed 音控鉴权原样保留。
+
+歌单是**服务端往返**的：前端发 `setlist_set`，等服务端广播回 `setlist` 才更新 UI。
+所以 worker 不部署这次改动的话，现场模式加不了歌。
+
+### 本地改动在新基底上的调整
+
+| # | 说明 |
+|---|---|
+| 7 | `pick-role` 上游新增了 live 分支，音控免密登录合并进新结构（并置 `useLiveUI = false`） |
+| 14 | `boot()` 的 `data-auto-role` 直达逻辑补上 `useLiveUI` 赋值，直达成员端时同样进现场界面 |
+| 17 | `cecp:role` 事件新增在 `showLive()` 里派发 |
+| 18 | 现场界面头部也加了「切换身份」（⇄ 图标，与 👤 换设备并列） |
+
+### 其它
+
+- `sw.js` 的 `CACHE_VERSION` 由 `v1` → `v2`。
+
+### 外部依赖（需要知情）
+
+现场模式的谱功能依赖 CECP 名下的四个外部地址，**均未 vendor 进本仓库**：
+
+| 用途 | 地址 |
+|---|---|
+| 简谱引擎（运行时动态插入 `<script>`） | `https://cye04.github.io/Cecp/youth-engine.js` |
+| 曲库站 | `https://musiclib.cecp.it` |
+| 曲目列表 | `https://api.github.com/repos/CYE04/Cecp/contents/songs` |
+| 谱 / 音频文件 | `https://cye04.github.io/Cecp/…` |
+
+后果：装到主屏幕后**离线看不了谱**（Service Worker 只缓存同源）；
+`api.github.com` 未认证有每小时 60 次限流；本项目长期依赖 `Cecp` 仓库不被改名或删除。
+内通本身（快捷信息、群聊、广播、音控台）不受影响，离线仍可打开。
+
+
 ## v3.0.0-lamezia.2（2026-07-30）单一入口 + PWA + 分发页
 
 ### 新增文件

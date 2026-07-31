@@ -216,7 +216,29 @@ cd .. && python3 -m http.server 8081
 
 ---
 
-## 9. 已知边界
+## 9. 现场模式（live）
+
+合体入口选「敬拜团」后进的是现场界面：谱 + 内通同屏 + 段落 cue。
+`data-menu-live="0"` 可退回纯内通界面。
+
+**共享歌单是服务端往返的**：前端发 `setlist_set`，服务端存进 DO storage 并广播
+`setlist` 回来，前端收到才更新 UI。所以 worker 没部署 `setlist_set` 的话，
+歌单点了没反应——这不是前端 bug。任何已注册的人都能改歌单（台上要能随手翻歌）。
+
+**谱功能依赖 CECP 名下的外部资源**（未 vendor 进本仓库）：
+
+| 用途 | 地址 | 对应属性 |
+|---|---|---|
+| 简谱引擎 | `https://cye04.github.io/Cecp/youth-engine.js` | `data-score-engine` |
+| 曲库站 | `https://musiclib.cecp.it` | `data-musiclib-base` / `data-musiclib-key` |
+| 曲目列表 | `https://api.github.com/repos/CYE04/Cecp/contents/songs` | `data-lib-api` |
+| 谱 / 音频 | `https://cye04.github.io/Cecp` | `data-songs-base` |
+
+后果：**离线看不了谱**（SW 只缓存同源）、`api.github.com` 每小时 60 次限流、
+本项目长期依赖 `Cecp` 仓库不被改名删除。内通本身不受影响，离线照常可用。
+以后要独立，把这四个地址改到 Lamezia 自己的仓库 / 域名即可（都能用 `data-*` 覆盖）。
+
+## 10. 已知边界
 
 - Screen Wake Lock 需要 https（或 localhost）；不支持的浏览器静默跳过。
 - iOS 的「添加到主屏幕」只有 Safari 有；微信 / QQ 内置浏览器没有，

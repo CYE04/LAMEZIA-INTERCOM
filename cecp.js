@@ -4,7 +4,7 @@
    ------------------------------------------------------------
    嵌入方式（新）：
      <cecp-intercom
-        data-ws-url="wss://ws-lamezia.xxx.workers.dev"
+        data-ws-url="wss://cecp-ws.xxx.workers.dev"
         data-mode="client"></cecp-intercom>
      <script src="cecp.js"></script>
 
@@ -16,7 +16,7 @@
      data-ws-url            必填，Worker 的 wss 地址
      data-mode              operator | client | listener | auto（默认 client）
                             auto = 先以 listener 被动收广播，用户点开后选身份升级成 client
-     data-room              房间名（字母/数字/_-，默认 lamezia）
+     data-room              房间名（字母/数字/_-，默认 cecp-main）
      data-layout            page | floating（listener/auto 默认 floating，其余默认 page）
      data-presets           JSON 数组，覆写设备身份列表
      data-cues              JSON，覆写快捷信息。支持两种格式：
@@ -28,6 +28,7 @@
      data-default-preset    自动选中的设备名
      data-page-key          localStorage 隔离键（默认 location.pathname）
      data-app-name          教会 / 应用名，显示在各界面标题（默认 LAMEZIA 敬拜内通）
+     data-auto-role         menu 模式下直达上次身份（operator / client，由入口页写入）
      data-member-chat="0"   关闭成员群聊
      样式全部在 Shadow DOM 内，与宿主页面 CSS 完全隔离；同页可多实例。
 
@@ -258,6 +259,11 @@
   ];
 
   var DEFAULT_BCAST_PRESETS = ['可以开始了', '下一首', '重来', '稍等一下', '准备结束'];
+
+  /* 现场模式：段落 cue（点一下告诉全员下面唱哪段） */
+  var DEFAULT_SECTION_CUES = ['前奏', '主歌', '预副歌', '副歌', '桥段', '间奏', '尾声'];
+  var LIVE_FLOW_CUES = ['准备好了', '稍等一下', '重来一次', '下一首'];
+  var SECTION_CUE_PREFIX = '【段落】';
 
   var STATUS_LABEL = { pending: '待处理', doing: '处理中', done: '已解决' };
   var SECTION_LABEL = { mic: '话筒 / 人声', keys: '键盘', guitar: '吉他', bass: '贝斯', drum: '鼓', other: '其它 / 流程' };
@@ -564,6 +570,136 @@
     '.cf-pin-actions .cf-btn-primary{margin-top:0;flex:1;width:auto}',
     '.cf-back-btn{flex:none;padding:12px 18px;border-radius:var(--r-md);background:var(--card3);font-size:15px;font-weight:600;color:var(--text)}',
 
+    /* ── 现场模式（live）：谱 + 内通同屏 ── */
+    '.cf-live{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}',
+    '.cf-live-top{flex:none;display:flex;align-items:center;gap:9px;padding:9px 12px;background:var(--card);border-bottom:1px solid var(--border)}',
+    '.cf-live-title{flex:1;min-width:0;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;font-size:14.5px;font-weight:600;letter-spacing:-.01em}',
+    '.cf-live-title .sub{font-weight:400;font-size:12.5px;color:var(--muted);margin-left:7px}',
+    '.cf-live-ico{flex:none;width:34px;height:34px;border-radius:10px;background:var(--card3);color:var(--muted);',
+    '  font-size:15px;display:flex;align-items:center;justify-content:center;transition:transform .12s}',
+    '.cf-live-ico:active{transform:scale(.93)}',
+    '.cf-live-ico.on{background:var(--acc-soft);color:var(--acc)}',
+    /* 主体：谱占满，内通改成「点按钮才出来的小弹窗」（原来常驻侧栏在 iPad 上太占地方） */
+    '.cf-live-body{position:relative;flex:1;min-height:0;display:flex;overflow:hidden}',
+    '.cf-live-score{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}',
+    /* 内通弹窗：右下角浮出，不铺满 */
+    '.cf-live-comm{position:absolute;z-index:45;right:12px;top:10px;width:min(360px,calc(100% - 24px));',
+    '  max-height:min(72%,520px);display:flex;flex-direction:column;overflow:hidden;',
+    '  background:var(--card);border:1px solid var(--border);border-radius:var(--r-lg);box-shadow:var(--shadow);',
+    '  opacity:0;transform:translateY(10px) scale(.97);pointer-events:none;',
+    '  transition:opacity .2s ease,transform .24s cubic-bezier(.32,.72,0,1)}',
+    '.cf-live.comm-open .cf-live-comm{opacity:1;transform:none;pointer-events:auto}',
+    '.cf-live-comm .cf-pane{background:var(--bg)}',
+    '.cf-live-comm .cf-cue-grid{grid-template-columns:repeat(2,minmax(0,1fr))}',
+    '.cf-live-comm .cf-cue{min-height:50px}',
+    '.cf-comm-mask{position:absolute;inset:0;z-index:44;background:transparent;display:none}',
+    '.cf-live.comm-open .cf-comm-mask{display:block}',
+    /* 唤出按钮在顶栏（底部被上一首/下一首占着，别挤在一起） */
+    '.cf-comm-btn{position:relative}',
+    '.cf-live.comm-open .cf-comm-btn{background:var(--acc-soft);color:var(--acc)}',
+    '.cf-comm-badge{position:absolute;top:-3px;right:-3px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;',
+    '  background:var(--red);color:#fff;font-size:10.5px;font-weight:700;display:flex;align-items:center;justify-content:center}',
+    '.cf-dock-grip{display:flex;flex:none;align-items:center;gap:9px;padding:8px 12px;border-bottom:1px solid var(--border)}',
+    '.cf-dock-grip .gbar{width:30px;height:4px;border-radius:99px;background:var(--border-strong)}',
+    '.cf-dock-grip .glbl{font-size:12.5px;font-weight:600;color:var(--muted)}',
+    '.cf-dock-grip .grow{flex:1}',
+    /* ── 谱：音频 / 移调 / 原谱（自己渲染，不连 musiclib）── */
+    '.cf-audio{padding:8px 12px 0}',
+    '.cf-audio audio{width:100%;height:34px}',
+    '.cf-score-tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:8px 12px 4px}',
+    '.cf-seg2{display:inline-flex;gap:2px;padding:2px;border-radius:10px;background:var(--card3)}',
+    '.cf-seg2 button{padding:6px 14px;border-radius:8px;font-size:13px;font-weight:600;color:var(--muted)}',
+    '.cf-seg2 button.on{background:var(--card);color:var(--text);box-shadow:var(--shadow-soft)}',
+    '.cf-key-box{display:inline-flex;align-items:center;gap:4px}',
+    '.cf-key-now{min-width:62px;padding:6px 10px;border-radius:9px;background:var(--acc-soft);color:var(--acc);',
+    '  font-size:13.5px;font-weight:700;font-variant-numeric:tabular-nums}',
+    '.cf-key-orig{font-size:11.5px;color:var(--muted)}',
+    '.cf-score-img-wrap{padding:0 12px 12px}',
+    /* 只留 .sw-score（sections 那部分谱）；引擎自带的播放器/标题/工具条都不要，
+       音频和移调用我自己那套（上面那条），免得两份控件打架 */
+    '.cf-jianpu{padding:0 4px 14px}',
+    /* .sw-tools 留着——引擎自带的「移调」在里面，和弦会跟着真的变 */
+    /* .sw-hd 留着——「移调」按钮在里面（藏了就没法移调了） */
+    '.cf-jianpu .ym-song-tabs,.cf-jianpu .ym-pl,.cf-jianpu .ym-song-head{display:none!important}',
+    '.cf-jianpu .sw-tools{display:flex!important;flex-wrap:wrap;gap:6px;padding:6px 4px 10px}',
+    /* 注意：这里绝不能改 .sw-score / .sw-wrap 的 padding·margin·width——
+       弧线和符杠是按真实容器宽度算坐标的，动了基准弧线就会塌（踩过）。
+       只去背景和外框，尺寸一律不碰。 */
+    '.cf-jianpu .ym-song-panel,.cf-jianpu .sw-wrap{background:none!important;border:none!important;box-shadow:none!important}',
+    /* 移调视图只要「移调后的谱」——引擎里的「简谱原稿」那张图不要（原图在另一个按钮里） */
+    '.cf-jianpu .sw-score img,.cf-jianpu .sw-orig,.cf-jianpu [class*="orig"]{display:none!important}',
+    /* 谱区 */
+    '.cf-score-stage{flex:1;min-height:0;overflow:auto;-webkit-overflow-scrolling:touch;padding:12px;display:flex;justify-content:center}',
+    '.cf-score-stage img{max-width:100%;height:auto;align-self:flex-start;border-radius:10px;box-shadow:var(--shadow-soft)}',
+    '.cf-score-stage>div{width:100%}',
+    '.cf-score-stage{display:block}',
+    /* 移调视图：iframe 跑 musiclib 本体，撑满谱区 */
+    '.cf-score-stage.is-frame{padding:0;overflow:hidden;display:flex}',
+    '.cf-score-frame{flex:1;width:100%;min-height:420px;border:none;display:block;background:var(--bg)}',
+    '.cf-score-bar{flex:none;display:flex;align-items:center;gap:7px;flex-wrap:wrap;padding:7px 12px;border-top:1px solid var(--border);background:var(--card)}',
+    '.cf-zbtn{width:31px;height:31px;border-radius:9px;background:var(--card3);font-size:16px;display:flex;align-items:center;justify-content:center}',
+    '.cf-zlabel{font-size:12px;color:var(--muted);min-width:40px;text-align:center;font-variant-numeric:tabular-nums}',
+    '.cf-zsep{flex:1}',
+    /* 段落 cue 条 */
+    '.cf-cue-bar{flex:none;display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:8px 12px;',
+    '  border-top:1px solid var(--border);background:var(--card);scrollbar-width:none}',
+    '.cf-cue-bar::-webkit-scrollbar{display:none}',
+    '.cf-cue-chip{flex:none;padding:8px 15px;border-radius:999px;background:var(--card3);font-size:13.5px;font-weight:600;',
+    '  transition:transform .12s,background .15s,color .15s}',
+    '.cf-cue-chip:active{transform:scale(.94)}',
+    '.cf-cue-chip.is-sec{background:var(--acc);color:#fff}',
+    '.cf-cue-chip.sent{background:var(--green);color:#fff}',
+    /* 歌单抽屉 */
+    '.cf-setlist{position:absolute;left:0;top:0;bottom:0;z-index:40;width:min(272px,80%);background:var(--card);',
+    '  box-shadow:var(--shadow);overflow-y:auto;padding:14px 11px;transform:translateX(-102%);transition:transform .26s cubic-bezier(.32,.72,0,1)}',
+    '.cf-live.setlist-open .cf-setlist{transform:none}',
+    '.cf-setlist-mask{position:absolute;inset:0;z-index:39;background:rgba(0,0,0,.3);opacity:0;pointer-events:none;transition:opacity .22s}',
+    '.cf-live.setlist-open .cf-setlist-mask{opacity:1;pointer-events:auto}',
+    '.cf-song{display:flex;align-items:center;gap:10px;width:100%;text-align:left;padding:10px;border-radius:11px;margin-bottom:4px}',
+    '.cf-song.on{background:var(--acc-soft)}',
+    '.cf-song-no{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}',
+    '.cf-song-t{display:block;font-size:14px;font-weight:600}',
+    '.cf-song-s{display:block;font-size:11px;color:var(--muted)}',
+    '.cf-song .grow{flex:1;min-width:0}',
+    /* 选歌器 */
+    '.cf-setlist-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}',
+    '.cf-song-row{display:flex;align-items:center;gap:2px}',
+    '.cf-song-row .cf-song{flex:1;min-width:0}',
+    '.cf-song-x{flex:none;width:26px;height:26px;border-radius:8px;background:var(--card3);color:var(--muted);font-size:12px;',
+    '  display:flex;align-items:center;justify-content:center}',
+    '.cf-song-x.is-del{color:var(--red)}',
+    '.cf-lib-box{margin-top:12px;padding-top:12px;border-top:1px solid var(--border)}',
+    '.cf-lib-search input{width:100%;padding:9px 12px;border-radius:10px;border:1px solid var(--border-strong);',
+    '  background:var(--bg);outline:none;font-size:16px;margin-bottom:8px}',
+    '.cf-lib-search input:focus{border-color:var(--acc)}',
+    '.cf-lib-list{max-height:46vh;overflow-y:auto;overscroll-behavior:contain}',
+    '.cf-lib-item{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:9px 10px;border-radius:10px;margin-bottom:3px}',
+    '.cf-lib-item.on{background:var(--green-soft)}',
+    '.cf-lib-item .grow{flex:1;min-width:0}',
+    '.cf-lib-plus{flex:none;width:24px;height:24px;border-radius:50%;background:var(--acc);color:#fff;font-size:14px;',
+    '  display:flex;align-items:center;justify-content:center}',
+    '.cf-lib-item.on .cf-lib-plus{background:var(--green)}',
+    /* 顶部消息横幅：谁发消息都从上面滑下来，盖在谱上 */
+    '.cf-live-banner{position:absolute;left:50%;top:10px;transform:translateX(-50%);z-index:60;width:min(520px,calc(100% - 20px));',
+    '  display:flex;align-items:center;gap:11px;padding:12px 15px;border-radius:15px;background:var(--card);',
+    '  border:1px solid var(--border);box-shadow:0 12px 40px rgba(0,0,0,.2);animation:cf-bn-in .3s cubic-bezier(.32,.72,0,1)}',
+    '.cf-live-banner[hidden]{display:none}',
+    '.cf-live-banner.leaving{animation:cf-bn-out .24s ease forwards}',
+    '.cf-live-banner .bn-ico{flex:none;font-size:20px}',
+    '.cf-live-banner .bn-body{flex:1;min-width:0}',
+    '.cf-live-banner .bn-from{font-size:11px;font-weight:700;color:var(--acc);letter-spacing:.02em}',
+    '.cf-live-banner .bn-txt{font-size:15px;font-weight:600;word-break:break-word}',
+    '.cf-live-banner.is-sec{border-color:var(--acc);background:var(--acc-soft)}',
+    '.cf-live-banner.is-sec .bn-txt{font-size:20px;letter-spacing:-.01em}',
+    '.cf-live-banner.is-high{border-color:var(--red)}',
+    '.cf-live-banner.is-high .bn-from{color:var(--red)}',
+    '@keyframes cf-bn-in{from{opacity:0;transform:translate(-50%,-14px) scale(.97)}to{opacity:1;transform:translate(-50%,0) scale(1)}}',
+    '@keyframes cf-bn-out{to{opacity:0;transform:translate(-50%,-14px) scale(.97)}}',
+    /* 窄屏：弹窗改成贴底的 sheet，宽度占满好点 */
+    '@media (max-width:640px){',
+    '  .cf-live-comm{right:8px;left:8px;width:auto;top:8px;max-height:74%}',
+    '}',
+
     /* ── 敬拜端 ── */
     '.cf-client-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:12px 16px;background:var(--card);border-bottom:1px solid var(--border)}',
     '.cf-banner{display:none;gap:10px;align-items:flex-start;margin:10px 14px 0;padding:12px 14px;border-radius:var(--r-md);',
@@ -663,9 +799,22 @@
     /* 三栏按面板自身宽度断点（容器查询），嵌进窄容器也不挤扁 */
     '.cf-op-grid{flex:1;display:grid;grid-template-columns:240px minmax(0,1fr) 280px;gap:12px;padding:12px 16px 16px;min-height:0}',
     '@container (max-width:1020px){.cf-op-grid{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.cf-op-panel.p-members{grid-column:1 / -1;max-height:220px}}',
-    '@container (max-width:640px){.cf-op-grid{grid-template-columns:minmax(0,1fr)}.cf-op-panel{max-height:none;min-height:220px}}',
-    /* 旧 iOS（<16，无容器查询）兜底：按视口宽度堆叠 */
-    '@media (max-width:640px){.cf-op-grid{grid-template-columns:minmax(0,1fr)}.cf-op-panel{max-height:none;min-height:220px}}',
+    /* 窄屏：整个音控台当一页滚，别再「锁一屏高 + 每块各自内滚」——
+       那样外层滑不动、每块还被挤扁。改成外层滚、内层放开自然高度。 */
+    '@container (max-width:640px){',
+    '  .cf-op{overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}',
+    '  .cf-op-grid{grid-template-columns:minmax(0,1fr);min-height:auto;padding:10px 12px 16px;gap:10px}',
+    '  .cf-op-panel{max-height:none;min-height:0}',
+    '  .cf-op-scroll{overflow-y:visible!important;max-height:none;flex:none}',
+    '  .cf-op-stats{grid-template-columns:repeat(3,minmax(0,1fr));padding:10px 12px 0}',
+    '}',
+    /* 旧 iOS（<16，无容器查询）兜底：按视口宽度 */
+    '@media (max-width:640px){',
+    '  .cf-op{overflow-y:auto;-webkit-overflow-scrolling:touch}',
+    '  .cf-op-grid{grid-template-columns:minmax(0,1fr);min-height:auto;padding:10px 12px 16px;gap:10px}',
+    '  .cf-op-panel{max-height:none;min-height:0}',
+    '  .cf-op-scroll{overflow-y:visible!important;max-height:none;flex:none}',
+    '}',
     '.cf-op-panel{display:flex;flex-direction:column;min-height:0;border-radius:var(--r-md);background:var(--card);box-shadow:var(--shadow-soft);overflow:hidden;border:1px solid transparent}',
     '.cf-op-panel-head{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:10px 13px;border-bottom:1px solid var(--border)}',
     '.cf-op-panel-title{font-size:13px;font-weight:600;letter-spacing:-.01em}',
@@ -790,6 +939,28 @@
     + '<path class="cf-ic-bars" fill="currentColor" fill-rule="evenodd" clip-rule="evenodd" d="M12 5.75a.75.75 0 0 1 .75.75v5a.75.75 0 1 1-1.5 0v-5a.75.75 0 0 1 .75-.75m3 1.5a.75.75 0 0 1 .75.75v2a.75.75 0 1 1-1.5 0V8a.75.75 0 0 1 .75-.75m-6 0a.75.75 0 0 1 .75.75v2a.75.75 0 0 1-1.5 0V8A.75.75 0 0 1 9 7.25"/>'
     + '</svg>';
 
+  /* ── 和弦移调（简谱数字不变，只有和弦符号跟着调走）── */
+  var SHARP_KEYS = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  var FLAT_KEYS  = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B'];
+  var KEY_INDEX = { 'C':0,'B#':0,'C#':1,'DB':1,'D':2,'D#':3,'EB':3,'E':4,'FB':4,'F':5,'E#':5,
+                    'F#':6,'GB':6,'G':7,'G#':8,'AB':8,'A':9,'A#':10,'BB':10,'B':11,'CB':11 };
+
+  function keyToIndex(name) {
+    var k = String(name || '').trim().replace(/^([A-Ga-g])([#b]?).*$/, '$1$2').toUpperCase();
+    return KEY_INDEX[k] === undefined ? -1 : KEY_INDEX[k];
+  }
+
+  /* 把一个和弦符号移调 steps 个半音，例如 F → G、Bbmaj7/F → Cmaj7/G */
+  function transposeChord(chord, steps, useFlat) {
+    if (!chord || !steps) return chord || '';
+    var table = useFlat ? FLAT_KEYS : SHARP_KEYS;
+    return String(chord).replace(/([A-G][#b]?)/g, function (m) {
+      var i = keyToIndex(m);
+      if (i < 0) return m;
+      return table[((i + steps) % 12 + 12) % 12];
+    });
+  }
+
   /* 话筒图形（着 --tone 色，选身份卡片用） */
   var MIC_SVG = '<svg class="cf-mic" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">'
     + '<rect x="9" y="2.5" width="6" height="11" rx="3" fill="currentColor" stroke="none"/>'
@@ -797,10 +968,10 @@
     + '<path d="M12 17.5V21"/><path d="M8.5 21h7"/>'
     + '</svg>';
 
+  /* 四角停靠 */
   /* 服务端拒绝音控鉴权时的 WebSocket close code（与 worker 的 OP_DENY_CLOSE_CODE 一致） */
   var CLOSE_OP_DENIED = 4001;
 
-  /* 四角停靠 */
   var CORNERS = ['bottom-left', 'bottom-right', 'top-left', 'top-right'];
   var CORNER_CLASS = { 'top-left': 'dock-tl', 'top-right': 'dock-tr', 'bottom-left': 'dock-bl', 'bottom-right': 'dock-br' };
   var CORNER_LABEL = { 'top-left': '左上', 'top-right': '右上', 'bottom-left': '左下', 'bottom-right': '右下' };
@@ -830,7 +1001,7 @@
     this.wsUrl = String(d.wsUrl || '').trim();
 
     var mode = String(d.mode || new URLSearchParams(location.search).get('mode') || 'client').trim().toLowerCase();
-    if (['operator', 'client', 'listener', 'auto', 'menu'].indexOf(mode) < 0) mode = 'client';
+    if (['operator', 'client', 'listener', 'auto', 'menu', 'live'].indexOf(mode) < 0) mode = 'client';
     this.configMode = mode;
 
     var room = String(d.room || '').trim();
@@ -868,10 +1039,32 @@
     this.cornerAttr = corner;
     /* data-launcher-icon 显式给了 emoji 就用 emoji，否则用内置声波耳机 SVG */
     this.launcherIconCustom = typeof d.launcherIcon === 'string' && d.launcherIcon.trim() !== '';
-    /* data-fullscreen：单独页面用，铺满整个视口 + 内部滚动（menu 模式默认开） */
+    /* data-fullscreen：单独页面用，铺满整个视口 + 内部滚动（menu / live 模式默认开） */
     this.fullscreen = ('fullscreen' in d)
       ? (d.fullscreen !== '0' && d.fullscreen !== 'false')
-      : (this.configMode === 'menu');
+      : (this.configMode === 'menu' || this.configMode === 'live');
+
+    /* ── 现场模式（live）：谱 + 内通同屏 ── */
+    /* 歌单：data-songs="id1,id2" 或链接 ?set=id1,id2；id 是 cecp 曲库的歌名 id，也可直接给图片地址 */
+    var setParam = '';
+    try { setParam = new URLSearchParams(location.search).get('set') || ''; } catch (err) {}
+    this.liveSongs = String(d.songs || setParam || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean);
+    this.songsBase = String(d.songsBase || 'https://cye04.github.io/Cecp').replace(/\/+$/, '');
+    this.musiclibBase = String(d.musiclibBase || 'https://musiclib.cecp.it').replace(/\/+$/, '');
+    /* musiclib 的访问 key（在页面源码里可见，只是轻量门槛，不是密码） */
+    this.musiclibKey = ('musiclibKey' in d) ? String(d.musiclibKey || '').trim() : 'cecp2026';
+    /* 曲库文件清单（实时枚举 GitHub，新加的诗歌才选得到） */
+    this.libApi = String(d.libApi || 'https://api.github.com/repos/CYE04/Cecp/contents/songs');
+    this.library = null;
+    /* 可移调真谱渲染器（youth-engine），不给就只显示谱图 */
+    this.scoreEngine = ('scoreEngine' in d) ? String(d.scoreEngine || '').trim() : (this.songsBase + '/youth-engine.js');
+    var liveTitle = '';
+    try { liveTitle = new URLSearchParams(location.search).get('title') || ''; } catch (err) {}
+    this.liveTitle = String(d.liveTitle || liveTitle || '敬拜现场');
+    this.sectionCues = readPresetList(d.sectionCues, DEFAULT_SECTION_CUES);
+    /* 合体入口选「敬拜团」后进现场界面（谱+内通）。data-menu-live="0" 可退回老的纯内通界面 */
+    this.menuLive = d.menuLive !== '0' && d.menuLive !== 'false';
+    this.useLiveUI = (this.configMode === 'live');
   };
 
   CecpApp.prototype.initState = function () {
@@ -1300,12 +1493,93 @@
       case 'pick-device': this.pickDevice(el.dataset.name || ''); break;
       case 'join': this.joinAsClient(); break;
       case 'reset-device': this.resetDevice(); break;
+      /* ── 现场模式 ── */
+      case 'live-cue': this.sendLiveCue(el); break;
+      case 'live-song': this.selectLiveSong(+el.dataset.i || 0); break;
+      case 'live-view':
+        this.live.view = el.dataset.v === 'trans' ? 'trans' : 'img';
+        this.selectLiveSong(this.live.i);
+        break;
+      case 'live-edit-set':
+        this.live.editing = !this.live.editing;
+        this.renderSetlist();
+        break;
+      case 'live-set-add': {
+        var addId = el.dataset.id || '';
+        var already = this.live.songs.findIndex(function (s) { return s.id === addId; });
+        if (already >= 0) {
+          this.live.songs.splice(already, 1);
+        } else {
+          var found = (this.library || []).filter(function (s) { return s.id === addId; })[0];
+          if (found) this.live.songs.push({ id: found.id, title: found.title, key: found.key, img: '', note: '' });
+        }
+        this.renderSetlist();
+        this.pushSetlist();
+        break;
+      }
+      case 'live-set-del':
+        this.live.songs.splice(+el.dataset.i, 1);
+        if (this.live.i >= this.live.songs.length) this.live.i = Math.max(0, this.live.songs.length - 1);
+        this.renderSetlist();
+        this.pushSetlist();
+        break;
+      case 'live-set-move': {
+        var from = +el.dataset.i, to = from + (+el.dataset.d);
+        if (to >= 0 && to < this.live.songs.length) {
+          var moved = this.live.songs.splice(from, 1)[0];
+          this.live.songs.splice(to, 0, moved);
+          this.renderSetlist();
+          this.pushSetlist();
+        }
+        break;
+      }
+      case 'live-prev': this.selectLiveSong(this.live.i - 1); break;
+      case 'live-next': this.selectLiveSong(this.live.i + 1); break;
+      case 'live-zoom':
+        this.live.zoom = Math.max(50, Math.min(260, this.live.zoom + (+el.dataset.d || 0)));
+        this.applyLiveZoom();
+        break;
+      case 'live-setlist': {
+        var liveRoot = this.$stage.querySelector('.cf-live');
+        if (liveRoot) liveRoot.classList.toggle('setlist-open');
+        break;
+      }
+      case 'live-key': {
+        var d = +el.dataset.d;
+        this.live.steps = d === 0 ? 0 : (this.live.steps || 0) + d;
+        if (this.live.steps > 11 || this.live.steps < -11) this.live.steps = 0;
+        this.selectLiveSong(this.live.i);
+        break;
+      }
+      case 'live-comm': {
+        var lr = this.$stage.querySelector('.cf-live');
+        if (lr) {
+          var nowOpen = lr.classList.toggle('comm-open');
+          if (nowOpen && this.activeTab === 'chat') this.chatSeenTs = Date.now();
+          this.syncBadge();
+        }
+        break;
+      }
+      case 'live-lib': {
+        var song = this.live && this.live.songs[this.live.i];
+        if (song && song.id) {
+          try { window.open(this.musiclibUrl(song.id, true), '_blank', 'noopener'); } catch (err) {}
+        }
+        break;
+      }
       case 'pick-role':
         /* 记住过密钥就直接验证登录，省掉每次输密码；失效会退回密码框 */
         if (el.dataset.role === 'operator') {
+          this.useLiveUI = false;
           if (this.opKey) this.enterOperator(this.opKey);
           else this.showOpPin();
-        } else { this.role = null; this.showSetup(); }
+        }
+        else {
+          /* 合体入口选「敬拜团」→ 直接进现场界面（谱 + 内通 + 段落 cue） */
+          this.useLiveUI = this.menuLive;
+          this.role = null;
+          this.showSetup();
+        }
         break;
       case 'op-pin-submit': this.enterOperator(); break;
       case 'back-menu': this.backToMenu(); break;
@@ -1370,10 +1644,12 @@
     if (this.configMode === 'menu') {
       /* 记住的身份：音控必须已有验证过的密钥才自动进（否则会闪一下空看板再弹密码框） */
       if (this.autoRole === 'operator' && this.opKey) {
+        this.useLiveUI = false;
         this.enterOperator(this.opKey);
         return;
       }
       if (this.autoRole === 'client') {
+        this.useLiveUI = this.menuLive;
         var rememberedName = lsGet(this.storeKey('name'));
         if (rememberedName) {
           this.whoAmI = rememberedName;
@@ -1415,7 +1691,7 @@
       this.whoAmI = remembered;
       this.role = 'client';
       this.loadHistory();
-      this.showClient();
+      if (this.useLiveUI) this.showLive(); else this.showClient();
       this.connect();
       return;
     }
@@ -1668,6 +1944,7 @@
       if (!entry.text) return;
       this.appendChat(entry);
       this.syncBanner();
+      if (this.useLiveUI) this.liveBanner('音控组', entry.text, 'high');
       if (this.role === 'listener' || (this.isFloating && !this.open)) {
         this.toast('📢', '音控组消息', entry.text, entry.ts);
       }
@@ -1690,6 +1967,7 @@
       if (!reply.text) return;
       this.appendChat(reply);
       this.syncBanner();
+      if (this.useLiveUI) this.liveBanner('音控回复', reply.text, 'high');
       if (this.isFloating && !this.open) this.toast('🎧', '音控回复', reply.text, reply.ts);
       vibrate([20, 40, 20]);
       this.syncBadge();
@@ -1717,7 +1995,58 @@
         this.syncBadge();
       } else if (this.role === 'client') {
         this.appendChat(chatEntry);
+        /* 现场模式：别人的段落 cue / 群聊都从顶部弹一条 */
+        if (this.useLiveUI) {
+          var isSecCue = chatEntry.text.indexOf(SECTION_CUE_PREFIX) === 0;
+          this.liveBanner(
+            identityMeta(chatEntry.from).title,
+            isSecCue ? chatEntry.text.slice(SECTION_CUE_PREFIX.length) : chatEntry.text,
+            isSecCue ? 'sec' : 'msg'
+          );
+        }
         this.syncBadge();
+      }
+      return;
+    }
+
+    /* 共享歌单：谁改了全房间同步 */
+    if (type === 'setlist') {
+      var incoming = Array.isArray(msg.songs) ? msg.songs : [];
+      if (this.liveTitleFromServer !== undefined || msg.title) this.liveTitleFromServer = msg.title || '';
+      if (!this.live) this.live = { songs: [], i: 0, zoom: 100, loaded: false, mode: 'img', view: 'img' };
+      var sameCount = this.live.songs.length === incoming.length;
+      var sameIds = sameCount && incoming.every(function (s, i) { return s.id === this.live.songs[i].id; }, this);
+      /* 服务器只存 {id,title,key}，谱/音频要用本地缓存补齐，没有就去抓 */
+      var selfSL = this;
+      this.songCache = this.songCache || {};
+      var needFetch = [];
+      this.live.songs = incoming.map(function (s) {
+        var cached = s.id && selfSL.songCache[s.id];
+        if (cached) return cached;
+        if (s.id) needFetch.push(s.id);
+        return { id: s.id || '', title: s.title || s.id || '未命名', key: s.key || '',
+                 img: '', mp3: '', sections: [], note: '' };
+      });
+      this.live.loaded = true;
+      if (needFetch.length) {
+        Promise.all(needFetch.map(function (id) { return selfSL.fetchLiveSong(id); })).then(function () {
+          if (selfSL.destroyed || !selfSL.live) return;
+          selfSL.live.songs = selfSL.live.songs.map(function (s) {
+            return (s.id && selfSL.songCache[s.id]) || s;
+          });
+          if (selfSL.useLiveUI && selfSL.$stage.querySelector('.cf-live')) {
+            selfSL.renderSetlist();
+            selfSL.selectLiveSong(selfSL.live.i);
+          }
+        });
+      }
+      if (this.live.i >= this.live.songs.length) this.live.i = 0;
+      if (this.useLiveUI && this.$stage.querySelector('.cf-live')) {
+        this.renderSetlist();
+        if (!sameIds) this.selectLiveSong(this.live.i);
+        if (msg.by && msg.by !== this.whoAmI) {
+          this.liveBanner(identityMeta(msg.by).title, '更新了歌单', 'msg');
+        }
       }
       return;
     }
@@ -1850,6 +2179,18 @@
     this.$badge.textContent = count > 99 ? '99+' : String(count || 0);
     /* 未读：悬浮球声波扩散动效 */
     if (this.$launcher) this.$launcher.classList.toggle('has-unread', count > 0 && !this.open);
+    this.syncCommBadge(count);
+  };
+
+  /* 现场模式：💬 按钮上的未读角标 */
+  CecpApp.prototype.syncCommBadge = function (count) {
+    if (!this.$stage) return;
+    var b = this.$stage.querySelector('[data-comm-badge]');
+    if (!b) return;
+    var open = this.$stage.querySelector('.cf-live.comm-open');
+    var n = open ? 0 : (count || 0);
+    b.hidden = !n;
+    b.textContent = n > 99 ? '99+' : String(n || 0);
   };
 
   /* ── Toast ── */
@@ -2211,7 +2552,7 @@
     this.pendingJoin = { name: this.whoAmI };
     this.role = 'client';
     this.loadHistory();
-    this.showClient();
+    if (this.useLiveUI) this.showLive(); else this.showClient();
 
     if (this.wsReady()) this.sendRegister();
     else this.connect();
@@ -2238,6 +2579,596 @@
       this.stopConnection();
     }
     this.showSetup();
+  };
+
+  /* ────────────────────────────────────────────
+     现场模式（live）：谱 + 内通同屏
+     竖屏 = 谱在上、内通常驻底部；横屏 = 谱左、内通右。
+     内通面板只有一份 DOM，靠 grid 换位，切屏不断线。
+  ──────────────────────────────────────────── */
+
+  /* 快捷信息 + 聊天两个面板（现场模式用；showClient 有自己那份，互不影响） */
+  CecpApp.prototype.paneStackHtml = function () {
+    var self = this;
+    return '<nav class="cf-tabs" role="tablist">'
+      + '  <button class="cf-tab is-active" type="button" role="tab" aria-selected="true" data-action="tab" data-tab="cues">快捷信息</button>'
+      + (this.enableChat
+          ? '  <button class="cf-tab" type="button" role="tab" aria-selected="false" data-action="tab" data-tab="chat">聊天<span class="cf-tab-badge" hidden></span></button>'
+          : '')
+      + '</nav>'
+      + '<div class="cf-pane cf-pane-cues is-active">'
+      + '  <div class="cf-cues-scroll">'
+      + '    <section class="cf-myreqs" hidden>'
+      + '      <div class="cf-cue-group-label">我发出的请求</div>'
+      + '      <div class="cf-myreq-list"></div>'
+      + '    </section>'
+      + this.cueGroups.map(function (group) {
+          return '<section class="cf-cue-group">'
+            + '<div class="cf-cue-group-label">' + esc(group.label) + '</div>'
+            + '<div class="cf-cue-grid">'
+            + group.cues.map(function (cue) {
+                return '<button class="cf-cue' + (cue.priority === 'high' ? ' is-high' : '') + '" type="button" data-action="cue"'
+                  + ' data-kind="' + esc(cue.kind) + '" data-label="' + esc(cue.label) + '"'
+                  + ' data-icon="' + esc(cue.icon) + '" data-priority="' + esc(cue.priority) + '">'
+                  + '<span class="cf-cue-icon">' + esc(cue.icon) + '</span>'
+                  + '<span class="cf-cue-copy">'
+                  + '  <span class="cf-cue-label">' + esc(cue.label) + '</span>'
+                  + '  <span class="cf-cue-desc">' + esc(cue.desc) + '</span>'
+                  + '</span>'
+                  + '</button>';
+              }).join('')
+            + '</div></section>';
+        }).join('')
+      + '  </div>'
+      + '  <div class="cf-compose">'
+      + '    <input type="text" maxlength="120" placeholder="其它要发给音控的信息…" data-enter="send-custom">'
+      + '    <button type="button" data-action="send-custom">发送</button>'
+      + '  </div>'
+      + '</div>'
+      + (this.enableChat
+          ? '<div class="cf-pane cf-pane-chat">'
+            + '  <div class="cf-thread"></div>'
+            + '  <div class="cf-compose">'
+            + '    <input type="text" maxlength="200" placeholder="发给大家的群聊消息…" data-enter="send-chat">'
+            + '    <button type="button" data-action="send-chat">发送</button>'
+            + '  </div>'
+            + '</div>'
+          : '')
+      + (void self, '');
+  };
+
+  CecpApp.prototype.showLive = function () {
+    this.emit('role', { role: 'client' });
+    var self = this;
+    this.activeTab = 'cues';
+    if (!this.live) this.live = { songs: [], i: 0, zoom: 100, loaded: false, mode: 'img', view: 'img' };
+    this.live.view = 'img';   /* 每次进现场页都从「原图」起步，点「移调」才渲简谱 */
+
+    var secCues = this.sectionCues.map(function (name) {
+      return '<button class="cf-cue-chip is-sec" type="button" data-action="live-cue" data-sec="1" data-text="' + esc(name) + '">' + esc(name) + '</button>';
+    }).join('');
+    var flowCues = LIVE_FLOW_CUES.map(function (name) {
+      return '<button class="cf-cue-chip" type="button" data-action="live-cue" data-text="' + esc(name) + '">' + esc(name) + '</button>';
+    }).join('');
+
+    /* 内通默认收着（谱占满），消息靠顶部横幅推给你，要发言点右下角 💬 */
+    this.$stage.innerHTML = '<div class="cf-app cf-live" style="display:flex;flex-direction:column;flex:1;min-height:0">'
+      + '<div class="cf-live-top">'
+      + '  <button class="cf-live-ico" type="button" data-action="live-setlist" title="歌单" aria-label="歌单">☰</button>'
+      + '  <div class="cf-live-title">' + esc(this.liveTitle) + '<span class="sub" data-live-now></span></div>'
+      + '  ' + this.statusHtml()
+      + '  <button class="cf-live-ico cf-comm-btn" type="button" data-action="live-comm" title="团队内通" aria-label="团队内通">'
+      + '    💬<span class="cf-comm-badge" data-comm-badge hidden></span></button>'
+      + '  <button class="cf-live-ico" type="button" data-action="reset-device" title="换设备" aria-label="换设备">👤</button>'
+      + (this.configMode === 'menu' ? '  <button class="cf-live-ico" type="button" data-action="switch-identity" title="切换身份" aria-label="切换身份">⇄</button>' : '')
+      + '</div>'
+      + '<div class="cf-live-body">'
+      + '  <div class="cf-setlist-mask" data-action="live-setlist"></div>'
+      + '  <aside class="cf-setlist" data-setlist><div class="cf-empty">歌单加载中…</div></aside>'
+      + '  <main class="cf-live-score">'
+      + '    <div class="cf-score-stage" data-score-stage><div class="cf-empty">正在取谱…</div></div>'
+      + '    <div class="cf-cue-bar">' + secCues + flowCues + '</div>'
+      + '    <div class="cf-score-bar">'
+      + '      <span data-zoom-box style="display:contents">'
+      + '        <button class="cf-zbtn" type="button" data-action="live-zoom" data-d="-10">−</button>'
+      + '        <span class="cf-zlabel" data-zoom-label>100%</span>'
+      + '        <button class="cf-zbtn" type="button" data-action="live-zoom" data-d="10">+</button>'
+      + '      </span>'
+      + '      <span class="cf-zsep"></span>'
+      + '      <button class="cf-ghost-btn" type="button" data-action="live-prev">上一首</button>'
+      + '      <button class="cf-ghost-btn" type="button" data-action="live-next">下一首</button>'
+      + '      <button class="cf-ghost-btn" type="button" data-action="live-lib" data-lib-btn hidden>曲库 ↗</button>'
+      + '    </div>'
+      + '  </main>'
+      + '  <div class="cf-comm-mask" data-action="live-comm"></div>'
+      + '  <section class="cf-live-comm">'
+      + '    <div class="cf-dock-grip" data-action="live-comm">'
+      + '      <span class="gbar"></span><span class="glbl">团队内通</span><span class="grow"></span>'
+      + '      <span class="glbl">关闭</span>'
+      + '    </div>'
+      + this.paneStackHtml()
+      + '  </section>'
+      + '  <div class="cf-live-banner" data-live-banner hidden></div>'
+      + '</div>'
+      + '</div>';
+
+    this.renderRequests();
+    this.renderChatPane();
+    this.syncBadge();
+    this.setStatus(this.online);
+    if (!this.live.loaded) this.loadLiveSongs();
+    else { this.renderSetlist(); this.selectLiveSong(this.live.i); }
+    void self;
+  };
+
+  /* 取歌：id → cecp 曲库 JSON；直接给 http 地址就当谱图 */
+  /* ── 曲库索引：实时从 GitHub 取（你随时会加新歌），歌名缓存在本地 ──
+     文件清单走 GitHub API（有 60 次/小时限额，所以缓存 1 小时）；
+     歌名只在遇到没见过的 id 时才去 Pages 拉，拉过就长期留着。 */
+  CecpApp.prototype.loadLibraryIndex = function () {
+    var self = this;
+    if (this._libPromise) return this._libPromise;
+
+    var LIST_TTL = 60 * 60 * 1000;
+    var titleCache = parseJsonMaybe(lsGet('cecp2:libtitles')) || {};
+    var listCache = parseJsonMaybe(lsGet('cecp2:liblist'));
+    var fresh = listCache && listCache.ts && (Date.now() - listCache.ts < LIST_TTL) && Array.isArray(listCache.ids);
+
+    var idsPromise = fresh
+      ? Promise.resolve(listCache.ids)
+      : fetch(this.libApi)
+          .then(function (r) { if (!r.ok) throw new Error('list'); return r.json(); })
+          .then(function (files) {
+            var ids = (files || [])
+              .filter(function (f) { return f && f.type === 'file' && /\.json$/i.test(f.name); })
+              .map(function (f) { return f.name.replace(/\.json$/i, ''); });
+            lsSet('cecp2:liblist', JSON.stringify({ ts: Date.now(), ids: ids }));
+            return ids;
+          })
+          .catch(function () { return (listCache && listCache.ids) || []; });   /* 取不到就用旧的 */
+
+    this._libPromise = idsPromise.then(function (ids) {
+      var missing = ids.filter(function (id) { return !titleCache[id]; });
+      if (!missing.length) return ids.map(function (id) { return titleCache[id]; });
+      /* 只拉没见过的歌名，分批避免一次性太多请求 */
+      return Promise.all(missing.map(function (id) {
+        return fetch(self.songsBase + '/songs/' + encodeURIComponent(id) + '.json')
+          .then(function (r) { return r.ok ? r.json() : null; })
+          .then(function (s) {
+            titleCache[id] = { id: id, title: (s && s.title) || id, key: (s && s.origKey) || '' };
+          })
+          .catch(function () { titleCache[id] = { id: id, title: id, key: '' }; });
+      })).then(function () {
+        lsSet('cecp2:libtitles', JSON.stringify(titleCache));
+        return ids.map(function (id) { return titleCache[id]; });
+      });
+    }).then(function (list) {
+      self.library = list.filter(Boolean);
+      return self.library;
+    });
+    return this._libPromise;
+  };
+
+  CecpApp.prototype.loadLiveSongs = function () {
+    var self = this;
+    var ids = this.liveSongs;
+    if (!ids.length) {
+      /* 没有 ?set= 也不是死胡同：歌单是共享的，点「☰ → 选歌」谁都能加 */
+      this.live.loaded = true;
+      var stage = this.$stage.querySelector('[data-score-stage]');
+      if (stage && !this.live.songs.length) {
+        stage.className = 'cf-score-stage';
+        stage.innerHTML = '<div class="cf-empty">还没选歌<br><span style="font-size:12px">点左上角 ☰ →「选歌」，选了大家都能看到</span></div>';
+      }
+      this.renderSetlist();
+      return;
+    }
+    Promise.all(ids.map(function (ref) { return self.fetchLiveSong(ref); })).then(function (songs) {
+      if (self.destroyed || !self.live) return;
+      /* 服务器已经有共享歌单了就别覆盖它——链接里的 ?set= 只当初始种子 */
+      if (self.live.loaded && self.live.songs.length) return;
+      self.live.songs = songs;
+      self.live.loaded = true;
+      self.renderSetlist();
+      self.selectLiveSong(0);
+      if (self.wsReady()) self.pushSetlist();   /* 让其他人也拿到 */
+    });
+  };
+
+  CecpApp.prototype.fetchLiveSong = function (ref) {
+    var self = this;
+    this.songCache = this.songCache || {};
+    if (this.songCache[ref]) return Promise.resolve(this.songCache[ref]);
+    var out = { id: ref, title: ref, key: '', img: '', mp3: '', sections: [], note: '' };
+    if (/^https?:\/\//i.test(ref)) {
+      out.img = ref; out.title = '谱图'; out.id = '';
+      return Promise.resolve(out);
+    }
+    return fetch(this.songsBase + '/songs/' + encodeURIComponent(ref) + '.json')
+      .then(function (r) { if (!r.ok) throw new Error('404'); return r.json(); })
+      .then(function (song) {
+        out.title = song.title || ref;
+        out.artist = song.artist || '';
+        out.key = song.origKey || '';
+        out.img = song.scoreImg || '';
+        out.mp3 = song.mp3 || '';
+        out.sections = Array.isArray(song.sections) ? song.sections : [];
+        out.raw = song;          /* 原始 JSON 交给真引擎渲染（老格式/严格模式都认 align 字段） */
+        return out;
+      })
+      .catch(function () {
+        out.id = '';                     /* 找不到就别去 iframe 一个 404 */
+        out.note = '曲库里找不到「' + ref + '」';
+        return out;
+      })
+      .then(function (x) { if (x.id) self.songCache[x.id] = x; return x; });
+  };
+
+  CecpApp.prototype.renderSetlist = function () {
+    var list = this.$stage.querySelector('[data-setlist]');
+    if (!list) return;
+    var cur = this.live.i;
+    var editing = this.live.editing;
+    list.innerHTML = '<div class="cf-setlist-head">'
+      + '<span class="cf-cue-group-label" style="margin:0">本周诗歌</span>'
+      + '<button class="cf-ghost-btn" type="button" data-action="live-edit-set">' + (editing ? '完成' : '选歌') + '</button>'
+      + '</div>'
+      + (this.live.songs.length
+          ? this.live.songs.map(function (x, i) {
+              return '<div class="cf-song-row">'
+                + '<button class="cf-song' + (i === cur ? ' on' : '') + '" type="button" data-action="live-song" data-i="' + i + '">'
+                + '<span class="cf-song-no">' + (i + 1 < 10 ? '0' : '') + (i + 1) + '</span>'
+                + '<span class="grow"><span class="cf-song-t">' + esc(x.title) + '</span>'
+                + '<span class="cf-song-s">' + (x.key ? esc(x.key) + ' 调' : '') + '</span></span>'
+                + '</button>'
+                + (editing
+                    ? '<button class="cf-song-x" type="button" data-action="live-set-move" data-i="' + i + '" data-d="-1" title="上移">↑</button>'
+                      + '<button class="cf-song-x" type="button" data-action="live-set-move" data-i="' + i + '" data-d="1" title="下移">↓</button>'
+                      + '<button class="cf-song-x is-del" type="button" data-action="live-set-del" data-i="' + i + '" title="移除">✕</button>'
+                    : '')
+                + '</div>';
+            }).join('')
+          : '<div class="cf-empty" style="padding:18px 8px">还没有选歌<br><span style="font-size:12px">点上面「选歌」加</span></div>')
+      + (editing ? '<div class="cf-lib-box" data-lib-box><div class="cf-empty" style="padding:14px">曲库加载中…</div></div>' : '');
+    if (editing) this.renderLibraryPicker();
+  };
+
+  /* 选歌器：搜曲库（实时枚举 GitHub，你新加的歌也在），点一下加进歌单，全房间同步 */
+  CecpApp.prototype.renderLibraryPicker = function (keyword) {
+    var self = this;
+    var box = this.$stage.querySelector('[data-lib-box]');
+    if (!box) return;
+    var draw = function (lib) {
+      var kw = String(keyword || self.live.libKw || '').trim().toLowerCase();
+      var chosen = self.live.songs.map(function (s) { return s.id; });
+      var hits = lib.filter(function (s) {
+        if (!kw) return true;
+        return s.title.toLowerCase().indexOf(kw) >= 0 || s.id.toLowerCase().indexOf(kw) >= 0;
+      }).slice(0, 60);
+      var listHtml = hits.length ? hits.map(function (s) {
+        var on = chosen.indexOf(s.id) >= 0;
+        return '<button class="cf-lib-item' + (on ? ' on' : '') + '" type="button" data-action="live-set-add" data-id="' + esc(s.id) + '">'
+          + '<span class="grow"><span class="cf-song-t">' + esc(s.title) + '</span>'
+          + '<span class="cf-song-s">' + (s.key ? esc(s.key) + ' 调 · ' : '') + esc(s.id) + '</span></span>'
+          + '<span class="cf-lib-plus">' + (on ? '✓' : '+') + '</span></button>';
+      }).join('') : '<div class="cf-empty" style="padding:16px">没找到</div>';
+
+      /* 只在第一次建输入框；之后只换列表 —— 每次重建输入框会丢焦点，打不了字 */
+      var input = box.querySelector('[data-lib-kw]');
+      if (!input) {
+        box.innerHTML = '<div class="cf-lib-search"><input type="text" placeholder="搜歌名或拼音…" data-lib-kw></div>'
+          + '<div class="cf-lib-list" data-lib-list></div>';
+        input = box.querySelector('[data-lib-kw]');
+        input.value = self.live.libKw || '';
+        input.addEventListener('input', function () {
+          self.live.libKw = input.value;
+          self.renderLibraryPicker(input.value);   /* 只会走到下面那行换列表 */
+        });
+      }
+      var listBox = box.querySelector('[data-lib-list]');
+      if (listBox) listBox.innerHTML = listHtml;
+    };
+    if (this.library) draw(this.library);
+    else this.loadLibraryIndex().then(function (lib) {
+      if (!self.destroyed && self.$stage.querySelector('[data-lib-box]')) draw(lib);
+    }).catch(function () {
+      box.innerHTML = '<div class="cf-empty" style="padding:14px">曲库取不到<br><span style="font-size:12px">检查网络后重开「选歌」</span></div>';
+    });
+  };
+
+  /* 改完就广播出去，全房间实时同步 */
+  CecpApp.prototype.pushSetlist = function () {
+    if (!this.wsReady()) { this.flash('当前离线，改动没同步出去', true); return; }
+    this.wsSend({
+      type: 'setlist_set',
+      songs: this.live.songs.map(function (s) { return { id: s.id, title: s.title, key: s.key }; }),
+      title: this.liveTitleFromServer || '',
+    });
+  };
+
+  CecpApp.prototype.selectLiveSong = function (i) {
+    if (!this.live || !this.live.songs.length) return;
+    this.live.i = Math.max(0, Math.min(this.live.songs.length - 1, i));
+    var x = this.live.songs[this.live.i];
+    var stage = this.$stage.querySelector('[data-score-stage]');
+    var now = this.$stage.querySelector('[data-live-now]');
+    var libBtn = this.$stage.querySelector('[data-lib-btn]');
+    if (now) now.textContent = '· ' + x.title;
+    if (libBtn) libBtn.hidden = !x.id;
+    if (stage) this.renderScore(stage, x);
+    var items = this.$stage.querySelectorAll('[data-action="live-song"]');
+    for (var k = 0; k < items.length; k++) items[k].classList.toggle('on', +items[k].dataset.i === this.live.i);
+    this.applyLiveZoom();
+    /* 关掉歌单抽屉 */
+    var root = this.$stage.querySelector('.cf-live');
+    if (root) root.classList.remove('setlist-open');
+  };
+
+  /* embed=1 → musiclib 只渲染这一首（曲库外壳全藏，移调/MP3/节拍器/原图都在）；
+     新窗口打开时不加 embed，给完整曲库 */
+  CecpApp.prototype.musiclibUrl = function (songId, full) {
+    var qs = [];
+    if (this.musiclibKey) qs.push('key=' + encodeURIComponent(this.musiclibKey));
+    if (songId) qs.push('song=' + encodeURIComponent(songId));
+    if (!full) qs.push('embed=1');
+    return this.musiclibBase + '/' + (qs.length ? '?' + qs.join('&') : '');
+  };
+
+  /* 真·简谱渲染器（youth-engine，跟 musiclib 同一套记谱规范：彩色和弦标、
+     连音线、段落标记、可移调）。它把 CSS 注进 document.head，而我们在
+     Shadow DOM 里 —— 所以加载后要把「新增的那几个 style」克隆进来才有样式。 */
+  CecpApp.prototype.ensureScoreEngine = function () {
+    if (this._ymPromise) return this._ymPromise;
+    var self = this;
+    if (!this.scoreEngine) return Promise.reject(new Error('no engine'));
+    this._ymPromise = new Promise(function (res, rej) {
+      if (window.YouthEngine && window.YouthEngine.renderSongObjects) return res(window.YouthEngine);
+      var before = [];
+      try { before = Array.prototype.slice.call(document.head.querySelectorAll('style,link[rel=stylesheet]')); } catch (err) {}
+      self._ymStylesBefore = before;
+      var s = document.createElement('script');
+      s.src = self.scoreEngine;
+      s.onload = function () {
+        if (window.YouthEngine && window.YouthEngine.renderSongObjects) res(window.YouthEngine);
+        else rej(new Error('engine bad'));
+      };
+      s.onerror = function () { rej(new Error('engine load failed')); };
+      document.head.appendChild(s);
+    }).then(function (eng) {
+      self.adoptEngineStyles();
+      return eng;
+    });
+    return this._ymPromise;
+  };
+
+  /* youth-engine 的样式是分批注入的（渲染时还会再加），所以这里要能重复调用，
+     每次只搬「还没搬过的那些」。用 Map 记住来源节点，别重复克隆。 */
+  CecpApp.prototype.adoptEngineStyles = function () {
+    if (!this.shadow) return;
+    var before = this._ymStylesBefore || [];
+    if (!this._ymAdopted) this._ymAdopted = [];
+    var now = [];
+    try { now = Array.prototype.slice.call(document.head.querySelectorAll('style,link[rel=stylesheet]')); } catch (err) { return; }
+    var self = this, added = 0;
+    /* 字体单独处理：@font-face 可能在宿主页面原有的样式表里（不在 before 之后新增的
+       那批），漏了它 segno/coda 这些记号就变豆腐块。字体规则不影响布局，全搬进来是安全的。 */
+    if (!this._ymFonts) {
+      this._ymFonts = true;
+      var css = '';
+      try {
+        Array.prototype.forEach.call(document.styleSheets, function (sheet) {
+          var rules; try { rules = sheet.cssRules; } catch (err) { return; }   /* 跨域表跳过 */
+          Array.prototype.forEach.call(rules || [], function (r) {
+            if (r.type === 5 /* CSSFontFaceRule */) css += r.cssText + '\n';
+          });
+        });
+      } catch (err) {}
+      if (css) {
+        var fs = document.createElement('style');
+        fs.setAttribute('data-ym-fonts', '1');
+        fs.textContent = css;
+        try { this.shadow.insertBefore(fs, this.shadow.firstChild); } catch (err) {}
+      }
+    }
+    now.forEach(function (node) {
+      if (before.indexOf(node) >= 0) return;            /* 宿主页面原有的，不要 */
+      if (self._ymAdopted.indexOf(node) >= 0) return;   /* 搬过了 */
+      self._ymAdopted.push(node);
+      try {
+        var copy = node.cloneNode(true);
+        copy.setAttribute('data-ym-style', '1');
+        self.shadow.insertBefore(copy, self.shadow.firstChild);  /* 放最前，别盖住我自己的样式 */
+        added++;
+      } catch (err) {}
+    });
+    return added;
+  };
+
+  /* ── 谱面板：自己渲染，不连 musiclib ──
+     只三样：音频 / 移调（和弦跟着走，简谱数字不变）/ 原谱图。 */
+  CecpApp.prototype.renderScore = function (stage, x) {
+    if (!x.sections) x.sections = [];
+    if (!x.img && !x.sections.length && !x.mp3) {
+      stage.innerHTML = '<div class="cf-empty">' + esc(x.note || '这首没有谱') + '</div>';
+      return;
+    }
+    var steps = this.live.steps || 0;
+    var origIdx = keyToIndex(x.key);
+    var useFlat = /b/i.test(x.key || '');
+    var nowKey = origIdx >= 0
+      ? (useFlat ? FLAT_KEYS : SHARP_KEYS)[((origIdx + steps) % 12 + 12) % 12]
+      : (x.key || '');
+    /* 两个视图：原图（谱图，默认）/ 移调（引擎渲染的简谱，可改调） */
+    var canTrans = !!x.sections.length;
+    var showChords = canTrans && (this.live.view === 'trans' || !x.img);
+
+    var html = '';
+    /* 音频：一条细的，不抢地方。占位符先放着，渲染完把「同一个 audio 节点」搬回来，
+       这样切原图/移调不会打断正在放的音源。 */
+    if (x.mp3) html += '<div class="cf-audio" data-audio-slot></div>';
+    /* 视图切换 + 移调 */
+    html += '<div class="cf-score-tools">';
+    if (x.img && canTrans) {
+      html += '<span class="cf-seg2">'
+        + '<button type="button" class="' + (showChords ? '' : 'on') + '" data-action="live-view" data-v="img">原图</button>'
+        + '<button type="button" class="' + (showChords ? 'on' : '') + '" data-action="live-view" data-v="trans">移调</button>'
+        + '</span>';
+    }
+    void nowKey; void origIdx; void steps;
+    html += '</div>';
+
+    if (showChords) {
+      /* 移调视图：自己渲染那一块谱（不连 musiclib、不开 iframe） */
+      html += '<div class="cf-jianpu" data-jianpu><div class="cf-empty">简谱渲染中…</div></div>';
+    } else if (x.img) {
+      html += '<div class="cf-score-img-wrap"><img alt="' + esc(x.title) + ' 乐谱" data-score-img></div>';
+    } else {
+      html += '<div class="cf-empty">这首只有音频，没有谱</div>';
+    }
+
+    /* 重建前先把音频节点摘出来保住（innerHTML 一改它就没了，正在放的会断） */
+    var keptAudio = this._audioEl;
+    if (keptAudio && keptAudio.parentNode) keptAudio.parentNode.removeChild(keptAudio);
+
+    stage.innerHTML = html;
+
+    var slot = stage.querySelector('[data-audio-slot]');
+    if (slot && x.mp3) {
+      var src = /^https?:/i.test(x.mp3) ? x.mp3
+        : 'https://cecp.it' + (x.mp3.charAt(0) === '/' ? '' : '/') + x.mp3;
+      /* 换歌了才新建；同一首切视图就复用，播放进度不丢 */
+      if (!keptAudio || keptAudio.dataset.src !== src) {
+        keptAudio = document.createElement('audio');
+        keptAudio.controls = true;
+        keptAudio.preload = 'none';
+        keptAudio.dataset.src = src;
+        keptAudio.src = src;
+      }
+      slot.appendChild(keptAudio);
+      this._audioEl = keptAudio;
+    } else if (!x.mp3) {
+      this._audioEl = null;
+    }
+
+    var img = stage.querySelector('[data-score-img]');
+    if (img) img.src = x.img;
+    stage.classList.remove('is-frame');
+    if (showChords) this.renderJianpu(stage, x, steps);
+    this.applyLiveZoom();
+  };
+
+  /* 用真引擎渲染简谱（老格式 / align:strict 严格模式都由引擎自己认） */
+  CecpApp.prototype.renderJianpu = function (stage, x, steps) {
+    var self = this;
+    var slot = stage.querySelector('[data-jianpu]');
+    if (!slot || !x.raw) return;
+    this.ensureScoreEngine().then(function (eng) {
+      if (self.destroyed) return;
+      var live = self.$stage.querySelector('[data-jianpu]');
+      if (!live) return;                        /* 已经切走了 */
+      /* 原样交给引擎——移调由引擎自己的「移调」按钮做，和弦才会真的跟着变。
+         之前在这里预先改 chord + origKey，等于跟引擎抢活，结果调号变了和弦没变。 */
+      var song = x.raw;
+      void steps;
+      try {
+        var node = eng.renderSongObjects([song]);
+        live.replaceChildren(node);
+        /* 和弦点击弹指法：引擎把委托挂在 document 上，但我们的和弦在 Shadow DOM 里，
+           事件重定向后它匹配不到 .p-chord，所以自己在 shadow 里挂一次，
+           命中就调它暴露的 ChordEngine.open(符号)。 */
+        if (!live.dataset.chordWired) {
+          live.dataset.chordWired = '1';
+          live.addEventListener('click', function (ev) {
+            var t = ev.target && ev.target.closest
+              ? ev.target.closest('.p-chord, .sw-chord, [class*="chord"]') : null;
+            if (!t || t.classList.contains('empty')) return;
+            var sym = (t.textContent || '').trim();
+            if (!sym) return;
+            try {
+              if (window.ChordEngine && window.ChordEngine.open) {
+                ev.preventDefault();
+                ev.stopPropagation();
+                window.ChordEngine.open(sym);
+                /* 弹窗挂在 document.body 上，而现场页 portal 的 z-index 很高，
+                   不提上来就会被盖住看不见 */
+                setTimeout(function () {
+                  var exp = document.querySelector('chord-explorer');
+                  if (exp) exp.style.zIndex = '2147483647';
+                }, 30);
+              }
+            } catch (err) {}
+          });
+        }
+        /* 引擎默认先显示「简谱原稿」（就是原图），要再点它自带的「移调」才展开真谱。
+           用户已经点过我这边的「移调」了，所以这里替他点一次，直接进可改调的谱。 */
+        setTimeout(function () {
+          if (self.destroyed) return;
+          var box = self.$stage.querySelector('[data-jianpu]');
+          if (!box || box.dataset.opened) return;
+          var t = Array.prototype.slice.call(box.querySelectorAll('button,[role="button"]'))
+            .filter(function (b) { return /移调/.test(b.textContent || ''); })[0];
+          if (t) { box.dataset.opened = '1'; t.click(); }
+        }, 260);
+        /* 样式是渲染过程中分批注入的，渲完再采几次才齐 */
+        self.adoptEngineStyles();
+        [120, 600, 1500].forEach(function (ms) {
+          setTimeout(function () { if (!self.destroyed) self.adoptEngineStyles(); }, ms);
+        });
+      } catch (err) {
+        live.innerHTML = '<div class="cf-empty">简谱渲染失败<br><span style="font-size:12px">先看原谱</span></div>';
+      }
+    }).catch(function () {
+      var live = self.$stage.querySelector('[data-jianpu]');
+      if (live) live.innerHTML = '<div class="cf-empty">简谱引擎没加载上<br><span style="font-size:12px">切「原谱」看图</span></div>';
+    });
+  };
+
+  CecpApp.prototype.applyLiveZoom = function () {
+    var img = this.$stage.querySelector('[data-score-img]');
+    var label = this.$stage.querySelector('[data-zoom-label]');
+    if (img) {
+      img.style.transformOrigin = 'top center';
+      img.style.transform = 'scale(' + (this.live.zoom / 100) + ')';
+    }
+    if (label) label.textContent = this.live.zoom + '%';
+  };
+
+  /* 段落 cue：走群聊发出去，全员顶部弹横幅 */
+  CecpApp.prototype.sendLiveCue = function (el) {
+    var text = el.dataset.text || '';
+    var isSec = el.dataset.sec === '1';
+    if (!text) return;
+    if (!this.wsReady()) { this.flash('当前离线，发不出去', true); return; }
+    var payload = isSec ? SECTION_CUE_PREFIX + text : text;
+    var id = nowId('cue');
+    this.wsSend({ type: 'member_chat', id: id, from: this.whoAmI, text: payload });
+    this.appendChat({ id: id, type: 'chat', from: this.whoAmI, text: payload, ts: Date.now(), mine: true, read: true });
+    this.liveBanner(isSec ? '你' : '你', text, isSec ? 'sec' : 'msg');
+    el.classList.add('sent');
+    var timer = setTimeout(function () { el.classList.remove('sent'); }, 700);
+    void timer;
+    vibrate(15);
+  };
+
+  /* 顶部横幅：音控组广播 / 别人的段落 cue / 定向回复都从上面滑下来 */
+  CecpApp.prototype.liveBanner = function (from, text, kind) {
+    var el = this.$stage && this.$stage.querySelector('[data-live-banner]');
+    if (!el) return;
+    var self = this;
+    el.className = 'cf-live-banner' + (kind === 'sec' ? ' is-sec' : '') + (kind === 'high' ? ' is-high' : '');
+    el.innerHTML = '<span class="bn-ico">' + (kind === 'sec' ? '🎵' : kind === 'high' ? '📢' : '💬') + '</span>'
+      + '<div class="bn-body"><div class="bn-from">' + esc(from) + '</div>'
+      + '<div class="bn-txt">' + esc(text) + '</div></div>';
+    el.hidden = false;
+    clearTimeout(this.liveBannerTimer);
+    this.liveBannerTimer = setTimeout(function () {
+      el.classList.add('leaving');
+      setTimeout(function () {
+        if (self.destroyed) return;
+        el.hidden = true;
+        el.classList.remove('leaving');
+      }, 250);
+    }, kind === 'sec' ? 3600 : 5000);
   };
 
   /* ────────────────────────────────────────────
@@ -2540,6 +3471,7 @@
       + '  <div class="cf-head-copy"><span class="cf-head-title">' + esc(this.appName) + ' 音控台</span><span class="cf-head-sub">' + esc(this.room) + ' 房间 · 请求与群聊实时汇总</span></div>'
       + '  <div class="cf-head-tools">'
       + '    <span class="cf-clock">🕒 <span data-clock>--:--:--</span></span>'
+      + (this.configMode === 'menu' ? '    <button class="cf-ghost-btn" type="button" data-action="back-menu">切换身份</button>' : '')
       + (this.isFloating ? '' : '    <button class="cf-ghost-btn" type="button" data-action="fullscreen">进入全屏</button>')
       + (this.configMode === 'menu' ? '<button class="cf-ghost-btn" type="button" data-action="switch-identity">切换身份</button>' : '')
       + this.statusHtml()
@@ -3006,6 +3938,7 @@
     if (this.clockTimer) { clearInterval(this.clockTimer); this.clockTimer = null; }
     clearTimeout(this.midnightTimer);
     clearTimeout(this.flashTimer);
+    clearTimeout(this.liveBannerTimer);
     if (this.docKeyHandler) {
       document.removeEventListener('keydown', this.docKeyHandler);
       this.docKeyHandler = null;
