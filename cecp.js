@@ -2399,6 +2399,9 @@
 
   CecpApp.prototype.showSetup = function (errorText) {
     this.emit('role', { role: 'client' });
+    /* 选设备界面必须在线才知道哪些设备已被占用（worker 会给 listener 发 taken_devices）。
+       合体入口选「敬拜团」时还没有任何连接，不先接上的话整页都不会置灰。 */
+    this.ensureSetupPresence();
     var self = this;
     var remembered = lsGet(this.storeKey('name'));
     this.setupSelected = this.presets.indexOf(getDeviceFromDisplayName(remembered)) >= 0
@@ -2527,6 +2530,17 @@
     if (!el) return;
     el.textContent = text || '';
     el.classList.toggle('show', !!text);
+  };
+
+  /* 选设备阶段以 listener 接入：不占设备名、不进 member_list，只为收 taken_devices。
+     选好设备后 joinAsClient 会在同一条连接上重新 register 成 client。 */
+  CecpApp.prototype.ensureSetupPresence = function () {
+    if (this.destroyed) return;
+    if (this.role === 'client' || this.role === 'operator') return;   // 已有正式身份
+    if (this.ws && (this.ws.readyState === 0 || this.ws.readyState === 1)) return; // 连接中/已连
+    if (!this.wsUrl) return;
+    this.role = 'listener';
+    this.connect();
   };
 
   CecpApp.prototype.joinAsClient = function () {

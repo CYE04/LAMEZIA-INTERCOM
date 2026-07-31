@@ -2,6 +2,44 @@
 
 > fork 自 CECP 敬拜团内通，供 Lamezia 教会独立部署（独立 Cloudflare 账号 / 仓库 / Pages）。
 
+## v3.0.0-lamezia.4（2026-07-31）修复：同一设备可被多人同时占用
+
+同一支话筒能被两个人同时选中，且选设备界面完全不置灰。查下来是**两个独立的 bug**，
+一前端一后端，各自都能单独造成问题：
+
+### 后端：占用判断比的是完整显示名，不是设备
+
+`worker/index.js` 的重复占用检查原本是：
+
+```js
+return m?.role === 'client' && m?.name === regName;
+```
+
+但注册名是「设备｜人名」（前端 `buildDisplayName`），
+所以 `🎤 话筒3｜小明` 和 `🎤 话筒3｜小红` 不相等 → 检查形同虚设，
+**两个人可以同时占用同一支话筒**。这是「多人选同一设备」的真正原因。
+
+改为新增 `deviceOf()`（按 `｜` / `|` 取设备部分，与前端 `getDeviceFromDisplayName` 对齐），
+只比设备部分。
+
+### 前端：选设备界面根本没有连接，收不到占用列表
+
+合体入口选「敬拜团」后直接 `showSetup()`，全程没有 `connect()`，
+所以 `taken_devices` 永远收不到，`this.takenDevices` 一直是空数组 → 什么都不置灰。
+（前端的 `isDeviceTaken` 逻辑本身是对的，会剥掉人名只比设备，只是没有数据。）
+
+新增 `ensureSetupPresence()`：进入选设备界面时若尚无连接，先以 `listener` 身份接入
+（不占设备名、不进 `member_list`，worker 本来就会给 listener 发 `taken_devices`）。
+选好设备后 `joinAsClient` 在同一条连接上重新 register 成 client。
+
+> 这个前端问题是从上游继承的：三页时代 `member.html` 用 `data-mode="auto"` 会先连
+> listener 所以正常，而 `menu` 模式没有这条路径。
+
+### 其它
+
+- `sw.js` 的 `CACHE_VERSION` 由 `v2` → `v3`。
+
+
 ## v3.0.0-lamezia.3（2026-07-31）合并 CECP 的现场模式（live）
 
 从 CECP 上游同步。合并方式：**以 CECP 新版 `cecp.js` 为基底，把本项目的 19 处改动逐条重打上去**

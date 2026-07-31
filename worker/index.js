@@ -184,11 +184,14 @@ export class WorshipRoom {
         }
 
         // 只对 client 做重复占用检查；operator 可以重复进入。
+        // 注意比的是「设备」而不是完整显示名：显示名是「设备｜人名」，
+        // 直接比全名的话「话筒3｜小明」和「话筒3｜小红」不相等，同一支话筒会被多人同时占用。
         if (regRole === 'client') {
+          const regDevice = deviceOf(regName);
           const alreadyTaken = this.state.getWebSockets().some((s) => {
             if (s === ws) return false;
             const m = safeMeta(s);
-            return m?.role === 'client' && m?.name === regName;
+            return m?.role === 'client' && deviceOf(m?.name) === regDevice;
           });
 
           if (alreadyTaken) {
@@ -880,6 +883,11 @@ function safeMeta(ws) {
   } catch {
     return {};
   }
+}
+
+// 显示名格式是「设备｜人名」（前端 buildDisplayName）。取设备部分用于占用判断。
+function deviceOf(value) {
+  return String(value || '').trim().split(/[｜|]/)[0].trim();
 }
 
 function cleanName(value) {
