@@ -46,6 +46,16 @@ const HISTORY_MAX = 120;
 const SETLIST_KEY = 'setlist_v1';
 const SETLIST_MAX = 30;
 
+// 同步标注（墨迹）：按歌分组存在一个 key 里，必须自己控总量。
+// SQLite-backed DO 的「键+值」上限是 2MB，而单笔最坏 600 点 ≈ 9.7KB，
+// 光一首歌 400 笔就约 3.9MB —— 所以除了每首笔数上限，还要有歌曲数量上限
+// 和总字节预算，否则 put 会抛异常，而那时 _broadcast 已经不会执行（静默失效）。
+const INK_KEY = 'ink_v1';
+const INK_MAX_PER_SONG = 400;   // 每首歌最多存这么多笔，超了丢最早的
+const INK_MAX_PTS = 600;        // 单笔最多点数，防止有人画一条巨长的线撑爆存储
+const INK_MAX_SONGS = 40;       // 最多保留这么多首歌的标注，超了丢最旧的
+const INK_MAX_BYTES = 1500000;  // 总字节预算，留足余量顶住 2MB 硬上限
+
 export class WorshipRoom {
   constructor(state, env) {
     this.state = state;
@@ -54,6 +64,7 @@ export class WorshipRoom {
     this._history = null; // 懒加载缓存
     this._opFailures = 0; // 连续音控鉴权失败次数（内存态，用于递增延迟）
     this._setlist = undefined; // undefined = 还没读过；null = 读过但没有
+    this._ink = undefined;     // 同上：标注按歌分组 { songId: [stroke,...] }
   }
 
   async fetch(request) {
@@ -237,6 +248,104 @@ export class WorshipRoom {
         // 新加入的人补发当前歌单（现场模式要用）
         await this._sendSetlistTo(ws);
 
+        break;
+      }
+
+      // ── 同步标注（墨迹）：画在谱面上，全房间同步 ──
+      // 任何已注册的人都能画（台上台下都要能标记），但 undo 只撤自己的那一笔。
+      case 'ink': {
+        const meta = safeMeta(ws);
+        if (!meta || !meta.role) break;
+
+        const song = cleanText(msg.song, 120);
+        const op = ['stroke', 'undo', 'clear'].indexOf(msg.op) >= 0 ? msg.op : '';
+        if (!song || !op) break;
+
+        const ink = await this._loadInk();
+        if (!ink[song]) ink[song] = [];
+
+        let payload = null;
+        if (op === 'stroke') {
+          const s = msg.stroke || {};
+          const pts = Array.isArray(s.pts) ? s.pts.slice(0, INK_MAX_PTS)
+            .filter((p) => Array.isArray(p) && p.length >= 2)
+            .map((p) => [round3(p[0]), round3(p[1])]) : [];
+          if (!pts.length) break;
+          const stroke = {
+            id: cleanId(s.id, 'ink'),
+            tool: ['pen', 'hl', 'shape', 'text'].indexOf(s.tool) >= 0 ? s.tool : 'pen',
+            text: s.tool === 'text' ? cleanText(s.text, 120) : undefined,
+            shape: ['free', 'line', 'rect', 'ellipse', 'arrow'].indexOf(s.shape) >= 0 ? s.shape : 'free',
+            color: cleanText(s.color, 24) || '#ff3b30',
+            width: Math.max(1, Math.min(40, Number(s.width) || 3)),
+            pts,
+            by: meta.name || '',
+            ts: Date.now(),
+          };
+          ink[song].push(stroke);
+          if (ink[song].length > INK_MAX_PER_SONG) ink[song].splice(0, ink[song].length - INK_MAX_PER_SONG);
+          payload = { type: 'ink', op: 'stroke', song, stroke, ts: stroke.ts };
+        } else if (op === 'undo') {
+          // 前端撤销 / 橡皮 / 局部擦都会带上具体 id（见 cecp.js 的 wsSend op:'undo'）。
+          // 必须按 id 删，否则「擦掉一条早先画的线」会变成删掉自己最新那笔 ——
+          // 被擦的那条刷新后复活，最新那笔却永久消失。
+          // 不带 id 时（老客户端）才退回「撤自己最后一笔」。
+          // 注意：按 id 删不校验归属，与前端橡皮一致（前端允许擦别人的记号）。
+          const wantId = cleanText(msg.id, 120);
+          let idx = -1;
+          if (wantId) {
+            idx = ink[song].findIndex((x) => x.id === wantId);
+          } else {
+            const mine = meta.name || '';
+            for (let i = ink[song].length - 1; i >= 0; i--) {
+              if (ink[song][i].by === mine) { idx = i; break; }
+            }
+          }
+          if (idx < 0) break;
+          const removed = ink[song].splice(idx, 1)[0];
+          payload = { type: 'ink', op: 'undo', song, id: removed.id, ts: Date.now() };
+        } else {
+          // 清空会抹掉所有人的标注且服务端无从恢复，所以不能让免凭据的 listener 干这事。
+          if (meta.role !== 'client' && meta.role !== 'operator') break;
+          ink[song] = [];
+          payload = { type: 'ink', op: 'clear', song, by: meta.name || '', ts: Date.now() };
+        }
+
+        // put 失败必须回滚内存缓存：_loadInk() 返回的就是 this._ink 本体，
+        // 上面已经改脏了；不回滚的话之后每一笔都会带着超限对象反复失败。
+        const saved = await this._saveInk(ink);
+        if (!saved) {
+          this._ink = undefined;   // 丢掉脏缓存，下次从存储重读
+          safeSend(ws, { type: 'error', code: 'ink_full', message: '标注太多，暂时存不下了', ts: Date.now() });
+          break;
+        }
+        this._broadcast(payload);
+        break;
+      }
+
+      // 拉某首歌已有的标注（换歌 / 刚进来时）
+      case 'ink_get': {
+        const song = cleanText(msg.song, 120);
+        if (!song) break;
+        const ink = await this._loadInk();
+        safeSend(ws, { type: 'ink', op: 'all', song, strokes: ink[song] || [], ts: Date.now() });
+        break;
+      }
+
+      // ── 激光笔：即时指示，不存盘，只转发给别人 ──
+      case 'laser': {
+        const meta = safeMeta(ws);
+        if (!meta || !meta.role) break;
+        const mode = msg.mode === 'line' ? 'line' : 'dot';
+        const pts = Array.isArray(msg.pts) ? msg.pts.slice(0, 120)
+          .filter((p) => Array.isArray(p) && p.length >= 2)
+          .map((p) => [round3(p[0]), round3(p[1])]) : [];
+        this._broadcast({
+          type: 'laser', mode, pts,
+          done: !!msg.done,
+          color: cleanText(msg.color, 24) || '#ff3b30',
+          by: meta.name || '', ts: Date.now(),
+        }, ws);
         break;
       }
 
@@ -595,6 +704,48 @@ export class WorshipRoom {
     }
   }
 
+  // ── 同步标注 ────────────────────────────────────────────────
+  // 写入前先裁到预算内，再落盘。返回 false 表示没存成功（调用方要回滚缓存）。
+  async _saveInk(ink) {
+    // 1) 歌曲数量：按每首最后一笔的时间，丢最旧的
+    const songs = Object.keys(ink);
+    if (songs.length > INK_MAX_SONGS) {
+      const lastTs = (k) => {
+        const arr = ink[k];
+        return (arr && arr.length) ? (arr[arr.length - 1].ts || 0) : 0;
+      };
+      songs.sort((a, b) => lastTs(a) - lastTs(b));
+      for (const k of songs.slice(0, songs.length - INK_MAX_SONGS)) delete ink[k];
+    }
+
+    // 2) 总字节：还超就从「笔数最多的那首」丢最早的笔，直到进预算
+    let guard = 0;
+    while (JSON.stringify(ink).length > INK_MAX_BYTES && guard++ < 5000) {
+      let biggest = null;
+      for (const k of Object.keys(ink)) {
+        if (!biggest || (ink[k] || []).length > (ink[biggest] || []).length) biggest = k;
+      }
+      if (!biggest || !(ink[biggest] || []).length) break;
+      ink[biggest].splice(0, Math.max(1, Math.ceil(ink[biggest].length * 0.1)));
+      if (!ink[biggest].length) delete ink[biggest];
+    }
+
+    try {
+      await this.state.storage.put(INK_KEY, ink);
+      this._ink = ink;
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async _loadInk() {
+    if (this._ink === undefined) {
+      this._ink = (await this.state.storage.get(INK_KEY)) || {};
+    }
+    return this._ink;
+  }
+
   // ── 共享歌单 ────────────────────────────────────────────────
   async _sendSetlistTo(ws) {
     if (this._setlist === undefined) {
@@ -616,6 +767,9 @@ export class WorshipRoom {
 
     await this.state.storage.put(DAILY_RESET_STAMP_KEY, stamp);
     await this._clearHistory();
+    /* 标注跟当天的谱走，隔天清掉（歌单是「本周诗歌」所以保留） */
+    this._ink = {};
+    await this.state.storage.delete(INK_KEY);
 
     this._broadcast({
       type: 'daily_reset',
@@ -883,6 +1037,13 @@ function safeMeta(ws) {
   } catch {
     return {};
   }
+}
+
+// 标注坐标是相对谱面的 0–1 归一化值，留点余量后压到 3 位小数，控制存储与带宽。
+function round3(n) {
+  const v = Number(n);
+  if (!isFinite(v)) return 0;
+  return Math.round(Math.max(-0.5, Math.min(1.5, v)) * 1000) / 1000;
 }
 
 // 显示名格式是「设备｜人名」（前端 buildDisplayName）。取设备部分用于占用判断。

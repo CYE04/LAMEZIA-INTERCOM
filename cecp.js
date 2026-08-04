@@ -581,7 +581,7 @@
     '.cf-live-ico.on{background:var(--acc-soft);color:var(--acc)}',
     /* 主体：谱占满，内通改成「点按钮才出来的小弹窗」（原来常驻侧栏在 iPad 上太占地方） */
     '.cf-live-body{position:relative;flex:1;min-height:0;display:flex;overflow:hidden}',
-    '.cf-live-score{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}',
+    '.cf-live-score{position:relative;flex:1;display:flex;flex-direction:column;min-width:0;min-height:0}',
     /* 内通弹窗：右下角浮出，不铺满 */
     '.cf-live-comm{position:absolute;z-index:45;right:12px;top:10px;width:min(360px,calc(100% - 24px));',
     '  max-height:min(72%,520px);display:flex;flex-direction:column;overflow:hidden;',
@@ -614,6 +614,202 @@
     '.cf-key-now{min-width:62px;padding:6px 10px;border-radius:9px;background:var(--acc-soft);color:var(--acc);',
     '  font-size:13.5px;font-weight:700;font-variant-numeric:tabular-nums}',
     '.cf-key-orig{font-size:11.5px;color:var(--muted)}',
+    /* ── 标注 / 激光笔画布：叠在谱上 ── */
+    '.cf-ink-wrap{position:relative;display:inline-block;max-width:100%}',
+    '.cf-ink-canvas{position:absolute;left:0;top:0;width:100%;height:100%;touch-action:none;z-index:3}',
+    '.cf-ink-canvas.idle{pointer-events:none}',
+    '.cf-laser-canvas{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:4}',
+    /* 工具条 */
+    /* GoodNotes 式工具条：深色悬浮胶囊，浮在谱上方居中，单色线稿图标 */
+    /* 浮在谱区顶部居中（GoodNotes 就在顶部），避开底部的段落 cue 和缩放条 */
+    '.cf-ink-bar{position:absolute;left:50%;transform:translateX(-50%);top:10px;z-index:20;',
+    '  display:flex;align-items:center;gap:2px;padding:5px 7px;border-radius:16px;',
+    '  background:rgba(38,38,41,.93);-webkit-backdrop-filter:blur(18px) saturate(1.6);backdrop-filter:blur(18px) saturate(1.6);',
+    '  box-shadow:0 6px 24px rgba(0,0,0,.28),0 1px 3px rgba(0,0,0,.2);color:rgba(255,255,255,.92);',
+    '  max-width:calc(100% - 24px);flex-wrap:nowrap;overflow:visible}',
+    '.cf-ic-tool{width:21px;height:21px;display:block}',
+    /* 拖动把手：左侧一根小竖条，按住可把工具条挪到任意位置 */
+    '.cf-ink-grip{flex:none;width:14px;height:26px;margin-right:2px;cursor:grab;touch-action:none;',
+    '  border-radius:6px;background:linear-gradient(var(--g),var(--g));background-size:2px 14px;',
+    '  background-position:center;background-repeat:no-repeat;--g:rgba(255,255,255,.34)}',
+    '.cf-ink-grip:active{cursor:grabbing;--g:rgba(255,255,255,.7)}',
+    '.cf-ink-bar.dragging{transition:none;box-shadow:0 12px 34px rgba(0,0,0,.42)}',
+    '.cf-ink-btn{width:38px;height:36px;border-radius:11px;background:transparent;color:inherit;',
+    '  display:inline-flex;align-items:center;justify-content:center;transition:transform .12s,background .15s}',
+    '.cf-ink-btn:active{transform:scale(.9)}',
+    '@media (hover:hover){.cf-ink-btn:hover{background:rgba(255,255,255,.1)}}',
+    /* 选中：GoodNotes 是「按钮抬起 + 高亮底」，不是整块变蓝 */
+    '.cf-ink-btn.on{color:#fff}',
+    '.cf-ink-sep{width:1px;height:20px;background:rgba(255,255,255,.16);margin:0 4px}',
+    '.cf-ink-btn.dim{opacity:.32}',
+    /* 悬停/长按说明气泡 */
+    '.cf-ink-tipbox{position:absolute;top:calc(100% + 8px);transform:translateX(-50%) translateY(-3px);',
+    '  padding:4px 9px;border-radius:7px;white-space:nowrap;pointer-events:none;',
+    '  background:rgba(18,18,20,.95);color:#fff;font-size:11.5px;font-weight:550;letter-spacing:.2px;',
+    '  box-shadow:0 4px 14px rgba(0,0,0,.35);opacity:0;z-index:40;',
+    '  transition:opacity .14s ease,transform .14s ease}',
+    '.cf-ink-tipbox.on{opacity:1;transform:translateX(-50%) translateY(0)}',
+    '.cf-ink-tipbox.above{top:auto;bottom:calc(100% + 8px)}',
+    /* ── 手机上整条要收小：11 个按钮按平板尺寸排会挤出屏幕 ── */
+    '@media (max-width:560px){',
+    '  .cf-ink-bar{padding:4px 5px;border-radius:14px}',
+    '  .cf-ink-btn{width:31px;height:32px;border-radius:9px}',
+    '  .cf-ic-tool{width:18px;height:18px}',
+    '  .cf-ink-slot{border-radius:10px}',
+    '  .cf-ink-slot.on .cf-ink-btn{width:28px}',
+    '  .cf-ink-chev{width:14px;height:32px;padding-right:3px;border-radius:0 10px 10px 0}',
+    '  .cf-ink-grip{width:11px;height:22px;margin-right:0}',
+    '  .cf-ink-sep{margin:0 2px;height:17px}',
+    '  .cf-ink-tip{right:3px;bottom:3px;width:6px;height:6px}',
+    '  .cf-ink-opts{width:min(268px,92vw);padding:12px 12px 10px;border-radius:15px}',
+    '  .cf-gn-prev{height:62px}',
+    '  .cf-gn-sw-c,.cf-gn-addcolor{width:23px;height:23px}',
+    '  .cf-gn-prow{gap:7px}',
+    '}',
+    '@media (max-width:400px){',
+    '  .cf-ink-btn{width:27px;height:30px}',
+    '  .cf-ic-tool{width:17px;height:17px}',
+    '  .cf-ink-slot.on .cf-ink-btn{width:25px}',
+    '  .cf-ink-chev{width:12px;height:30px}',
+    '}',
+    /* GoodNotes 式：工具槽 = 图标 + 选中后挂的小箭头；图标右下角一点当前颜色 */
+    /* 选中的工具 = 图标和 ⌄ 并排装在同一个高亮圆角块里（GoodNotes 就是这样） */
+    '.cf-ink-slot{position:relative;display:inline-flex;flex-direction:row;align-items:center;',
+    '  border-radius:12px;transition:background .18s ease,transform .18s ease}',
+    '.cf-ink-slot.on{background:rgba(255,255,255,.17);transform:translateY(-2px)}',
+    '.cf-ink-slot.on.laser{background:rgba(255,59,48,.3)}',
+    '.cf-ink-slot.on .cf-ink-btn{width:34px}',
+    '.cf-ink-btn{position:relative}',
+    /* 选中工具右下角一点当前颜色（GoodNotes 就是这么提示的） */
+    '.cf-ink-tip{position:absolute;right:5px;bottom:4px;width:7px;height:7px;border-radius:50%;',
+    '  box-shadow:0 0 0 1.5px rgba(38,38,41,.93)}',
+    /* 展开箭头：在图标右边，同一块里 */
+    '.cf-ink-chev{width:17px;height:36px;padding-right:4px;border-radius:0 12px 12px 0;',
+    '  font-size:11px;line-height:1;color:rgba(255,255,255,.62);background:transparent;',
+    '  display:flex;align-items:center;justify-content:center;',
+    '  transition:transform .22s ease,color .18s}',
+    '.cf-ink-chev.open{color:#fff}',
+    /* 箭头指向浮层将要出现的方向：往下开就朝下，往上开就朝上 */
+    '.cf-ink-bar.opts-up .cf-ink-chev{transform:rotate(180deg)}',
+    /* 选项浮层：默认往下开；空间不够时整条 bar 带 .opts-up，改成往上开 */
+    '.cf-ink-bar.opts-up .cf-ink-opts{top:auto;bottom:calc(100% + 9px)}',
+    '.cf-ink-opts{position:absolute;left:50%;transform:translateX(-50%);top:calc(100% + 9px);z-index:30;',
+    '  display:flex;flex-direction:column;gap:9px;padding:11px 12px;border-radius:17px;',
+    '  background:rgba(38,38,41,.96);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);',
+    '  box-shadow:0 10px 34px rgba(0,0,0,.34);color:rgba(255,255,255,.92)}',
+    '.cf-opt-row{display:flex;align-items:center;gap:7px}',
+    '.cf-opt-shape{width:34px;height:32px;border-radius:9px;background:rgba(255,255,255,.1);color:inherit;',
+    '  display:inline-flex;align-items:center;justify-content:center}',
+    '.cf-opt-shape.on{background:rgba(255,255,255,.24)}',
+    '.cf-opt-shape .cf-ic-tool{width:19px;height:19px}',
+    '.cf-opt-mode{padding:7px 13px;border-radius:9px;background:rgba(255,255,255,.1);color:inherit;font-size:12.5px;font-weight:600}',
+    '.cf-opt-mode.on{background:rgba(255,255,255,.24)}',
+    '.cf-ink-color{width:25px;height:25px;border-radius:50%;border:2px solid transparent;padding:0}',
+    '.cf-ink-color.on{border-color:#fff;box-shadow:0 0 0 2px rgba(38,38,41,.93)}',
+    '.cf-ink-w{width:32px;height:30px;border-radius:9px;background:rgba(255,255,255,.1);color:#fff;',
+    '  display:inline-flex;align-items:center;justify-content:center}',
+    '.cf-ink-w.on{background:rgba(255,255,255,.24)}',
+    '.cf-ink-w i{display:block;background:currentColor;border-radius:99px}',
+    /* ── GoodNotes 式设置面板：标题 / 预览 / 卡片 / 滑杆 / 分组开关 ── */
+    '.cf-ink-opts{width:min(272px,80vw);padding:14px 14px 12px;gap:0;align-items:stretch;',
+    /* 必须不透明：半透明会把谱透上来，字全糊（GoodNotes 的面板是实心的） */
+    '  background:#26262b;',
+    /* 面板可能比谱区还高，超出就内部滚，别顶穿到段落 cue 上 */
+    '  max-height:min(72vh,var(--cf-opts-max,560px));overflow-y:auto;overscroll-behavior:contain}',
+    /* 指向工具条的小尖角 */
+    '.cf-ink-opts::before{content:"";position:absolute;left:50%;margin-left:-7px;',
+    '  border:7px solid transparent;border-bottom-color:#26262b;top:-14px}',
+    '.cf-ink-bar.opts-up .cf-ink-opts::before{top:auto;bottom:-14px;',
+    '  border-bottom-color:transparent;border-top-color:#26262b}',
+    '.cf-gn-title{text-align:center;font-size:15px;font-weight:650;color:#fff;margin-bottom:10px}',
+    /* 实时笔迹预览 */
+    '.cf-gn-prev{display:block;width:100%;height:74px;margin:0 0 12px}',
+    /* 笔型 / 橡皮型 / 激光模式：一排卡片 */
+    '.cf-gn-cards{display:flex;gap:6px;margin-bottom:12px}',
+    '.cf-gn-card{flex:1;min-width:0;padding:9px 4px 8px;border-radius:12px;background:transparent;',
+    '  color:rgba(255,255,255,.62);display:flex;flex-direction:column;align-items:center;gap:5px}',
+    '.cf-gn-card.on{background:rgba(255,255,255,.13);color:#fff}',
+    '.cf-gn-card-ic{display:flex;align-items:center;justify-content:center;height:24px}',
+    '.cf-gn-card-ic .cf-ic-tool{width:22px;height:22px}',
+    '.cf-gn-card-tx{font-size:11.5px;font-weight:550;letter-spacing:.2px}',
+    /* 激光两张卡里的示意图 */
+    '.cf-gn-laser-dot{width:9px;height:9px;border-radius:50%;background:#ff3b30;',
+    '  box-shadow:0 0 9px 3px rgba(255,59,48,.55)}',
+    '.cf-gn-laser-line{width:30px;height:11px;border-bottom:2.5px solid #ff3b30;border-radius:0 0 30px 30px;',
+    '  box-shadow:0 5px 9px -4px rgba(255,59,48,.8)}',
+    /* 滑杆组：整组一个浅底圆角块 */
+    '.cf-gn-group{background:rgba(255,255,255,.07);border-radius:13px;padding:10px 12px 4px;margin-bottom:12px}',
+    '.cf-gn-slide{margin-bottom:9px}',
+    '.cf-gn-slide-hd{display:flex;justify-content:space-between;align-items:baseline;',
+    '  font-size:12.5px;color:rgba(255,255,255,.62);margin-bottom:5px}',
+    '.cf-gn-slide-hd b{font-weight:550;color:rgba(255,255,255,.9);font-variant-numeric:tabular-nums}',
+    '.cf-gn-range{-webkit-appearance:none;appearance:none;width:100%;height:26px;background:none;display:block}',
+    '.cf-gn-range::-webkit-slider-runnable-track{height:26px;border-radius:13px;background:rgba(255,255,255,.11)}',
+    '.cf-gn-range::-webkit-slider-thumb{-webkit-appearance:none;width:34px;height:22px;margin-top:2px;',
+    '  border-radius:11px;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.4);cursor:grab}',
+    '.cf-gn-range::-moz-range-track{height:26px;border-radius:13px;background:rgba(255,255,255,.11)}',
+    '.cf-gn-range::-moz-range-thumb{width:34px;height:22px;border:none;border-radius:11px;background:#fff}',
+    /* 分节标题 + 开关行 */
+    '.cf-gn-sec{font-size:12px;color:rgba(255,255,255,.45);margin:0 0 6px 3px}',
+    '.cf-gn-rows{background:rgba(255,255,255,.07);border-radius:13px;overflow:hidden;margin-bottom:12px}',
+    '.cf-gn-row{width:100%;display:flex;align-items:center;justify-content:space-between;gap:10px;',
+    '  padding:11px 12px;font-size:13.5px;color:#fff;text-align:left}',
+    '.cf-gn-row+.cf-gn-row{box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}',
+    '@media (hover:hover){.cf-gn-row:hover{background:rgba(255,255,255,.05)}}',
+    /* iOS 式开关 */
+    '.cf-gn-sw{flex:none;width:42px;height:25px;border-radius:99px;background:rgba(255,255,255,.2);',
+    '  position:relative;transition:background .22s cubic-bezier(.3,1,.4,1)}',
+    '.cf-gn-sw::after{content:"";position:absolute;top:2.5px;left:2.5px;width:20px;height:20px;border-radius:50%;',
+    '  background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.35);',
+    '  transition:transform .2s ease}',
+    '.cf-gn-sw.on{background:#34c759}',
+    '.cf-gn-sw.on::after{transform:translateX(17px)}',
+    /* 橡皮说明文字 / 大小 / 形状排 / 颜色排 */
+    '.cf-gn-tip{font-size:12px;color:rgba(255,255,255,.5);margin:-4px 2px 11px;line-height:1.4}',
+    '.cf-gn-sizes,.cf-gn-shapes{display:flex;gap:8px;justify-content:center;margin-bottom:11px}',
+    /* 调色盘 */
+    '.cf-gn-palette{display:flex;flex-direction:column;gap:9px;margin-bottom:2px}',
+    '.cf-gn-prow{display:flex;gap:8px;flex-wrap:wrap}',
+    '.cf-gn-sw-c{width:25px;height:25px;border-radius:50%;flex:none;padding:0;',
+    '  box-shadow:inset 0 0 0 1px rgba(255,255,255,.14);transition:transform .12s ease,box-shadow .16s ease}',
+    '.cf-gn-sw-c:active{transform:scale(.9)}',
+    '.cf-gn-sw-c.on{box-shadow:0 0 0 2px #26262b,0 0 0 4px #fff}',
+    '.cf-gn-addcolor{width:25px;height:25px;border-radius:50%;flex:none;padding:0;line-height:1;',
+    '  font-size:15px;color:rgba(255,255,255,.6);border:1.5px dashed rgba(255,255,255,.4);',
+    '  display:inline-flex;align-items:center;justify-content:center}',
+    '.cf-ink-hint{display:none}',
+    /* ── 文字工具：点谱上直接长出来的输入框（window.prompt 在 iOS WebView 里会被拦） ── */
+    '.cf-ink-textbox{position:absolute;z-index:25;width:210px;min-width:110px;max-width:min(80%,460px);',
+    '  padding:7px 10px;border-radius:8px;resize:both;overflow:hidden;line-height:1.3;',
+    '  font-weight:600;font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",system-ui,sans-serif;',
+    '  background:#fff;border:2px solid #2f6fd0;outline:none;',
+    '  box-shadow:0 4px 16px rgba(0,0,0,.18);caret-color:#2f6fd0;',
+    '  transform-origin:top left;transform:scale(.97);opacity:0;',
+    '  transition:transform .14s ease-out,opacity .12s ease}',
+    '.cf-ink-textbox.in{transform:scale(1);opacity:1}',
+    '.cf-ink-textbox.out{transform:scale(.97);opacity:0;transition-duration:.11s}',
+    '.cf-ink-textbox::placeholder{color:rgba(0,0,0,.28);font-weight:500}',
+    /* ── GoodNotes 式动效：弹性、有回弹，不是硬切 ── */
+    /* 面板出现：只是轻轻淡入 + 一点点位移，不做回弹（弹来弹去看着廉价，GoodNotes 也没有） */
+    '@keyframes cf-opts-in{',
+    '  0%{opacity:0;transform:translateX(-50%) translateY(var(--cf-oy,-5px)) scale(.985)}',
+    '  100%{opacity:1;transform:translateX(-50%) translateY(0) scale(1)}}',
+    '.cf-ink-opts{transform-origin:var(--cf-oo,top center)}',
+    '.cf-ink-opts.just-open{animation:cf-opts-in .16s cubic-bezier(.32,.72,.35,1)}',
+    '.cf-ink-bar.opts-up .cf-ink-opts{--cf-oy:7px;--cf-oo:bottom center}',
+    /* 选中工具时轻轻弹一下 */
+    /* 选中态一律是平滑过渡，不做弹跳；只有按下去的一瞬有轻微回弹（跟 GoodNotes 一致） */
+    '.cf-ink-color,.cf-ink-w,.cf-opt-shape,.cf-opt-mode,.cf-gn-card,.cf-gn-row{',
+    '  transition:transform .12s ease,background .18s ease,border-color .18s ease,box-shadow .18s ease}',
+    '.cf-ink-color:active,.cf-ink-w:active,.cf-opt-shape:active,',
+    '.cf-opt-mode:active,.cf-gn-card:active{transform:scale(.94)}',
+    /* 工具条落位用弹簧曲线；拖动中关掉过渡免得跟手发飘 */
+    /* 位置不做过渡：每次重绘都从中间滑过去很飘，GoodNotes 的工具条也是直接落位 */
+    '.cf-ink-bar{transition:box-shadow .2s}',
+
+    '@media (prefers-reduced-motion:reduce){',
+    '  .cf-ink-opts.just-open{animation:none}',
+    '  .cf-ink-bar,.cf-ink-textbox{transition:none}}',
     '.cf-score-img-wrap{padding:0 12px 12px}',
     /* 只留 .sw-score（sections 那部分谱）；引擎自带的播放器/标题/工具条都不要，
        音频和移调用我自己那套（上面那条），免得两份控件打架 */
@@ -961,6 +1157,83 @@
     });
   }
 
+  /* ── 标注 / 激光笔 ── */
+  /* 调色盘：亮色 / 深色 / 灰白三排（照 GoodNotes 的「笔颜色」面板） */
+  var INK_PALETTE = [
+    ['#ff453a', '#ff9f0a', '#ffd60a', '#32d74b', '#40c8e0', '#0a84ff', '#bf5af2', '#ff6bce'],
+    ['#c0392b', '#b5530f', '#b8860b', '#1e8e3e', '#0f7b96', '#2a4bd7', '#7b2ff2', '#a3238e'],
+    ['#ffffff', '#e5e5ea', '#aeaeb2', '#636366', '#1d1d1f']
+  ];
+  /* 工具条上直接露出来的常用五色 */
+  var INK_COLORS = ['#ff3b30', '#0071e3', '#ffcc00', '#34c759', '#1d1d1f'];
+  var INK_WIDTHS = [2, 4, 8];
+  /* GoodNotes 式单色线稿图标（24×24，currentColor，斜握的笔/马克笔/橡皮），不用 emoji */
+  function svg(inner, opts) {
+    return '<svg class="cf-ic-tool" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+      + ' stroke-width="' + ((opts && opts.w) || 1.7) + '" stroke-linecap="round" stroke-linejoin="round"'
+      + ' aria-hidden="true" focusable="false">' + inner + '</svg>';
+  }
+  var ICON = {
+    /* 手：选它就退出画笔，谱恢复正常滚动、和弦也能点 */
+    pan: svg('<path d="M8.5 11V5.6a1.6 1.6 0 0 1 3.2 0V11"/>'
+      + '<path d="M11.7 10.6V4.7a1.6 1.6 0 0 1 3.2 0V11"/>'
+      + '<path d="M14.9 11V6.6a1.6 1.6 0 0 1 3.2 0V14a6.5 6.5 0 0 1-6.5 6.5h-.7a5.6 5.6 0 0 1-4.2-1.9l-3-3.4a1.6 1.6 0 0 1 2.3-2.2l2.2 2"/>'
+      + '<path d="M8.5 11v3.6"/>'),
+    /* 钢笔：斜握的笔身 + 笔尖 */
+    pen: svg('<path d="M16.8 3.6a2 2 0 0 1 2.8 2.8L9.2 16.8l-3.7.9.9-3.7z"/><path d="M14.6 5.8l3.6 3.6"/>'),
+    /* 荧光笔：粗斜马克笔 + 宽笔迹 */
+    hl: svg('<path d="M15.4 4.3a1.8 1.8 0 0 1 2.5 0l1.8 1.8a1.8 1.8 0 0 1 0 2.5l-8.3 8.3-4.3.9.9-4.3z"/>'
+      + '<path d="M5 20.5h14" stroke-width="3" opacity=".45"/>'),
+    /* 形状：圆 + 方 + 三角叠在一起（GoodNotes 形状工具的经典表达） */
+    shape: svg('<circle cx="9.2" cy="9.2" r="4.6"/><rect x="10.4" y="10.4" width="8.4" height="8.4" rx="1.4"/>'),
+    /* 文字 */
+    text: svg('<path d="M5 6.5V5h14v1.5"/><path d="M12 5v14"/><path d="M9 19h6"/>'),
+    /* 橡皮：斜置的橡皮块 */
+    erase: svg('<path d="M8.6 19H19"/><path d="M15.2 4.6a1.9 1.9 0 0 1 2.7 0l1.5 1.5a1.9 1.9 0 0 1 0 2.7l-8 8H7.4l-2.6-2.6a1.9 1.9 0 0 1 0-2.7z"/><path d="M11.6 8.2l4.2 4.2"/>'),
+    /* 激光笔：中心点 + 放射线 */
+    laser: svg('<circle cx="12" cy="12" r="2.6" fill="currentColor" stroke="none"/>'
+      + '<path d="M12 3.4v2.6M12 18v2.6M3.4 12h2.6M18 12h2.6M6 6l1.8 1.8M16.2 16.2L18 18M18 6l-1.8 1.8M7.8 16.2L6 18" opacity=".75"/>'),
+    /* 撤销 / 清空 */
+    undo: svg('<path d="M4 9h11a4.5 4.5 0 0 1 0 9H9"/><path d="M7.5 5.5L4 9l3.5 3.5"/>'),
+    redo: svg('<path d="M20 9H9a4.5 4.5 0 0 0 0 9h6"/><path d="M16.5 5.5L20 9l-3.5 3.5"/>'),
+    trash: svg('<path d="M4.5 6.5h15"/><path d="M9.5 6.5V5a1.2 1.2 0 0 1 1.2-1.2h2.6A1.2 1.2 0 0 1 14.5 5v1.5"/>'
+      + '<path d="M6.6 6.5l.9 12a1.6 1.6 0 0 0 1.6 1.5h5.8a1.6 1.6 0 0 0 1.6-1.5l.9-12"/>'),
+  };
+  var INK_TOOLS = [
+    { id: 'pan',   icon: ICON.pan,   title: '滑动' },
+    { id: 'pen',   icon: ICON.pen,   title: '笔' },
+    { id: 'hl',    icon: ICON.hl,    title: '荧光笔' },
+    { id: 'shape', icon: ICON.shape, title: '形状' },
+    { id: 'text',  icon: ICON.text,  title: '文字' },
+    { id: 'erase', icon: ICON.erase, title: '橡皮' },
+    { id: 'laser', icon: ICON.laser, title: '激光笔' }
+  ];
+  /* 三种笔型（跟 GoodNotes 一致）：钢笔有粗细变化、圆珠笔恒定、画笔更粗更软 */
+  var PEN_TYPES = [
+    { id: 'fountain', name: '钢笔',
+      icon: svg('<path d="M17.6 3.4a1.9 1.9 0 0 1 2.7 2.7l-9.4 9.4-3.6 1 1-3.6z"/><path d="M13.6 6.4l3.6 3.6"/><path d="M4 20.5c2.6-.4 4-1.6 4.6-3"/>') },
+    { id: 'ball', name: '圆珠笔',
+      icon: svg('<path d="M16.9 3.9a1.6 1.6 0 0 1 2.3 2.3L9 16.4l-3.1.8.8-3.1z"/><path d="M14.6 6.2l3.2 3.2"/>', { w: 1.5 }) },
+    { id: 'brush', name: '画笔',
+      icon: svg('<path d="M15.8 4.4a1.7 1.7 0 0 1 2.4 0l1.4 1.4a1.7 1.7 0 0 1 0 2.4l-8.2 8.2-3.8-3.8z"/><path d="M7.6 12.6c-1.9 1-2.4 3.1-3.1 5.4 2.4-.6 4.5-1.1 5.5-3"/>') }
+  ];
+  /* 谱盒的参考宽度。坐标早就归一化了，但粗细/字号/光点这些还是绝对像素——
+     结果同一条笔画在窄屏（谱盒小）上相对谱面就显得特别粗。所有像素量一律
+     乘 box.w/800，这样手机、平板、电脑看到的比例才一样。 */
+  var SCORE_REF_W = 800;
+  function inkScale(box) {
+    if (box && box.k != null) return box.k;          /* 预览画布自己指定 */
+    return Math.max(0.35, Math.min(2.2, ((box && box.w) || SCORE_REF_W) / SCORE_REF_W));
+  }
+  var ERASE_SIZES = [1.4, 2.6, 5];      /* 橡皮半径，单位是谱宽的 % */
+  var SHAPE_CYCLE = ['line', 'rect', 'ellipse', 'arrow'];
+  var SHAPE_ICON = {
+    line: svg('<path d="M5 19L19 5"/>'),
+    rect: svg('<rect x="4.5" y="6.5" width="15" height="11" rx="1.6"/>'),
+    ellipse: svg('<ellipse cx="12" cy="12" rx="7.5" ry="5.5"/>'),
+    arrow: svg('<path d="M5 19L19 5"/><path d="M12.5 5H19v6.5"/>'),
+  };
+
   /* 话筒图形（着 --tone 色，选身份卡片用） */
   var MIC_SVG = '<svg class="cf-mic" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">'
     + '<rect x="9" y="2.5" width="6" height="11" rx="3" fill="currentColor" stroke="none"/>'
@@ -1135,6 +1408,7 @@
         if (self.destroyed) return;
         self.syncViewport();
         if (self.isFloating) self.applyCorner(self.corner, false);
+        if (self.inkEls) self.resizeInkCanvas();   /* 谱盒子变了，标注要重新按比例铺开 */
       }, 120);
     };
     window.addEventListener('resize', this.viewportHandler);
@@ -1498,8 +1772,91 @@
       case 'live-song': this.selectLiveSong(+el.dataset.i || 0); break;
       case 'live-view':
         this.live.view = el.dataset.v === 'trans' ? 'trans' : 'img';
+        this.ink.opts = false;   /* 两边标注各存各的，工具保持选中即可 */
         this.selectLiveSong(this.live.i);
         break;
+      /* ── 标注 / 激光笔 ── */
+      case 'ink-tool': {
+        var t = el.dataset.t;
+        if (this.ink.on && this.ink.tool === t) {
+          /* 再点已选中的工具 = 展开/收起它的全部选项（GoodNotes 就是这个行为） */
+          this.ink.opts = !this.ink.opts;
+        } else {
+          this.ink.on = true;
+          this.ink.tool = t;
+          this.ink.opts = false;
+        }
+        this.closeTextBox();
+        this.renderInkBar();
+        this.syncInkInteractive();
+        break;
+      }
+      case 'ink-opts':
+        this.ink.opts = !this.ink.opts;
+        this.renderInkBar();
+        break;
+      case 'ink-pen-type':
+        this.ink.pen = el.dataset.p || 'fountain';
+        this.saveInkPrefs();
+        this.refreshInkOpts();
+        break;
+      case 'ink-erase-type':
+        this.ink.eraseType = el.dataset.e || 'std';
+        this.ink.eraseWhole = this.ink.eraseType === 'stroke';
+        this.saveInkPrefs();
+        this.refreshInkOpts();
+        break;
+      case 'ink-toggle':
+        this.ink[el.dataset.k] = !this.ink[el.dataset.k];
+        if (el.dataset.k === 'lowLag' && this.ink.lowLag === undefined) this.ink.lowLag = false;
+        this.saveInkPrefs();
+        this.refreshInkOpts();
+        break;
+      case 'ink-shape':
+        this.ink.shape = SHAPE_CYCLE.indexOf(el.dataset.s) >= 0 ? el.dataset.s : SHAPE_CYCLE[0];
+        this.refreshInkOpts();
+        break;
+      case 'ink-laser-mode':
+        this.ink.laserMode = el.dataset.m === 'line' ? 'line' : 'dot';
+        this.refreshInkOpts();
+        break;
+      case 'ink-erase-size':
+        this.ink.eraseSize = Math.max(0, Math.min(ERASE_SIZES.length - 1, +el.dataset.i || 0));
+        this.refreshInkOpts();
+        break;
+      case 'ink-erase-mode':
+        this.ink.eraseWhole = el.dataset.w === '1';
+        this.ink.eraseType = this.ink.eraseWhole ? 'stroke' : 'std';
+        this.refreshInkOpts();
+        break;
+      case 'ink-color-custom':
+        this.pickCustomInkColor();
+        break;
+      case 'ink-color':
+        this.ink.color = el.dataset.c || INK_COLORS[0];
+        this.saveInkPrefs();
+        this.syncTextBoxStyle();
+        this.refreshInkOpts();
+        break;
+      case 'ink-width':
+        this.ink.width = +el.dataset.w || 4;
+        this.syncTextBoxStyle();
+        this.refreshInkOpts();
+        break;
+      case 'ink-undo': this.inkUndo(); break;
+      case 'ink-redo': this.inkRedo(); break;
+      case 'ink-clear': {
+        /* 默认必须是 false：PWA / WebView 里 confirm 可能被拦截并抛异常，
+           默认 true 的话误触垃圾桶就会无提示清空全房间的标注，且服务端无从恢复。 */
+        var ok = false;
+        try { ok = window.confirm('清空这首歌的所有标注？（大家的都会清掉）'); } catch (err) { ok = false; }
+        if (!ok) break;
+        this.pushInkOp({ del: this.ink.strokes.slice(), add: [] });
+        this.ink.strokes = [];
+        this.redrawInk();
+        this.wsSend({ type: 'ink', op: 'clear', song: this.currentSongKey() });
+        break;
+      }
       case 'live-edit-set':
         this.live.editing = !this.live.editing;
         this.renderSetlist();
@@ -2009,6 +2366,54 @@
       return;
     }
 
+    /* 同步标注：别人画的、撤的、清的 */
+    if (type === 'ink') {
+      if (!this.ink || !this.live) return;
+      if (String(msg.song || '') !== this.currentSongKey()) return;   /* 不是当前这首就忽略 */
+      if (msg.op === 'all') {
+        this.ink.strokes = Array.isArray(msg.strokes) ? msg.strokes.slice() : [];
+      } else if (msg.op === 'stroke') {
+        var st = msg.stroke;
+        if (st && !this.ink.strokes.some(function (x) { return x.id === st.id; })) this.ink.strokes.push(st);
+      } else if (msg.op === 'undo') {
+        var uid = msg.id;
+        for (var k = this.ink.strokes.length - 1; k >= 0; k--) {
+          if (this.ink.strokes[k].id === uid) { this.ink.strokes.splice(k, 1); break; }
+        }
+      } else if (msg.op === 'clear') {
+        this.ink.strokes = [];
+        if (msg.by && msg.by !== this.whoAmI) this.flash(identityMeta(msg.by).title + ' 清空了标注');
+      }
+      this.redrawInk();
+      return;
+    }
+
+    /* 激光笔：别人指哪儿，我这边也亮 */
+    if (type === 'laser') {
+      if (!this.inkEls || !this._inkBox) return;
+      if (msg.by && msg.by === this.whoAmI) return;
+      var rPts = msg.pts || [];
+      var rMode = msg.mode === 'line' ? 'line' : 'dot';
+      var rColor = msg.color || '#ff3b30';
+      /* 对方还在指 → 直接画；对方松手了 → 走同一套渐隐动画，观感一致 */
+      if (this._laserRaf) { cancelAnimationFrame(this._laserRaf); this._laserRaf = 0; }
+      clearTimeout(this._laserFade);
+      clearTimeout(this._laserRemoteFade);
+      this.paintLaser(rPts, rColor, rMode);
+      this._laserLast = rPts;
+      if (msg.done) {
+        this.fadeLaser(rPts, rColor, rMode);
+      } else {
+        var selfL = this;
+        /* 对方中途断了也别一直亮着 */
+        this._laserRemoteFade = setTimeout(function () {
+          if (selfL.destroyed) return;
+          selfL.fadeLaser(rPts, rColor, rMode);
+        }, 2500);
+      }
+      return;
+    }
+
     /* 共享歌单：谁改了全房间同步 */
     if (type === 'setlist') {
       var incoming = Array.isArray(msg.songs) ? msg.songs : [];
@@ -2399,9 +2804,6 @@
 
   CecpApp.prototype.showSetup = function (errorText) {
     this.emit('role', { role: 'client' });
-    /* 选设备界面必须在线才知道哪些设备已被占用（worker 会给 listener 发 taken_devices）。
-       合体入口选「敬拜团」时还没有任何连接，不先接上的话整页都不会置灰。 */
-    this.ensureSetupPresence();
     var self = this;
     var remembered = lsGet(this.storeKey('name'));
     this.setupSelected = this.presets.indexOf(getDeviceFromDisplayName(remembered)) >= 0
@@ -2440,6 +2842,17 @@
     this.$stage.innerHTML = html;
     this.syncSetupPreview();
     this.syncSetupTaken();
+    this.ensureTakenFeed();
+  };
+
+  /* 选设备这一屏必须先连上，否则收不到 taken_devices，谁都显示「可选」，
+     结果同一支话筒被多个人选走。menu / live 模式进来时还没有任何连接，
+     所以这里先以 listener 挂上（服务端会给 listener 发占用列表），
+     选好设备点「进入」时再在同一条连接上重注册成 client。 */
+  CecpApp.prototype.ensureTakenFeed = function () {
+    if (this.destroyed || this.wsReady() || this.role) return;
+    this.role = 'listener';
+    this.connect();
   };
 
   /* 占用列表里存的是完整名「设备｜人名」，比对时只看设备段；自己占用的设备不算 */
@@ -2530,17 +2943,6 @@
     if (!el) return;
     el.textContent = text || '';
     el.classList.toggle('show', !!text);
-  };
-
-  /* 选设备阶段以 listener 接入：不占设备名、不进 member_list，只为收 taken_devices。
-     选好设备后 joinAsClient 会在同一条连接上重新 register 成 client。 */
-  CecpApp.prototype.ensureSetupPresence = function () {
-    if (this.destroyed) return;
-    if (this.role === 'client' || this.role === 'operator') return;   // 已有正式身份
-    if (this.ws && (this.ws.readyState === 0 || this.ws.readyState === 1)) return; // 连接中/已连
-    if (!this.wsUrl) return;
-    this.role = 'listener';
-    this.connect();
   };
 
   CecpApp.prototype.joinAsClient = function () {
@@ -2657,6 +3059,19 @@
     this.activeTab = 'cues';
     if (!this.live) this.live = { songs: [], i: 0, zoom: 100, loaded: false, mode: 'img', view: 'img' };
     this.live.view = 'img';   /* 每次进现场页都从「原图」起步，点「移调」才渲简谱 */
+    if (!this.ink) {
+      this.ink = { on: true, tool: 'pan', shape: 'line', color: INK_COLORS[0], width: 4,
+                   laserMode: 'dot', eraseSize: 1, eraseWhole: false, opts: false,
+                   /* 笔（GoodNotes 那套）：笔型 + 笔尖 + 压感 + 扁平度 + 稳定性 */
+                   pen: 'fountain', press: 0.5, flat: 0, stab: 0.2,
+                   /* 荧光笔独立一套参数，跟笔互不影响 */
+                   hlWidth: 12, hlAlpha: 0.35, hlStraight: false,
+                   eraseHlOnly: false, custom: [],
+                   undoStack: [], redoStack: [],
+                   strokes: [], song: '' };
+      var saved = parseJsonMaybe(lsGet(this.storeKey('inkpen')));
+      if (saved) for (var sk in saved) if (sk in this.ink) this.ink[sk] = saved[sk];
+    }
 
     var secCues = this.sectionCues.map(function (name) {
       return '<button class="cf-cue-chip is-sec" type="button" data-action="live-cue" data-sec="1" data-text="' + esc(name) + '">' + esc(name) + '</button>';
@@ -2681,6 +3096,7 @@
       + '  <aside class="cf-setlist" data-setlist><div class="cf-empty">歌单加载中…</div></aside>'
       + '  <main class="cf-live-score">'
       + '    <div class="cf-score-stage" data-score-stage><div class="cf-empty">正在取谱…</div></div>'
+      + '    <div class="cf-ink-bar" data-ink-bar></div>'
       + '    <div class="cf-cue-bar">' + secCues + flowCues + '</div>'
       + '    <div class="cf-score-bar">'
       + '      <span data-zoom-box style="display:contents">'
@@ -2920,6 +3336,1328 @@
 
   /* embed=1 → musiclib 只渲染这一首（曲库外壳全藏，移调/MP3/节拍器/原图都在）；
      新窗口打开时不加 embed，给完整曲库 */
+  /* ────────────────────────────────────────────
+     同步标注 + 激光笔
+     坐标一律归一化成 0~1（相对谱图本身），这样每个人屏幕大小不同
+     也能落在同一个位置。标注锚在原谱图上（宽高比固定所以对得准）；
+     简谱是响应式的、换行会随宽度变，所以那边只给激光笔。
+  ──────────────────────────────────────────── */
+
+  CecpApp.prototype.renderInkBar = function () {
+    var bar = this.$stage && this.$stage.querySelector('[data-ink-bar]');
+    if (!bar) return;
+    var ink = this.ink, self = this;
+    /* 原图和移调都能画：标注按「歌 + 视图」分开存（currentSongKey 带 @view），
+       坐标归一化到当前谱盒，各画各的互不串。 */
+    var canDraw = true;
+
+    /* GoodNotes 式：工具就是一排图标；选中的那个下面挂个小箭头，
+       点箭头才弹出「这个工具的选项」浮层（颜色/粗细/形状/激光模式）。
+       比原来「再点一次循环切换」好发现得多，工具条也清爽。 */
+    var tools = INK_TOOLS.map(function (t) {
+      if (t.id !== 'laser' && !canDraw) return '';
+      var on = ink.on && ink.tool === t.id;
+      var icon = t.icon;
+      if (t.id === 'shape' && on) icon = SHAPE_ICON[ink.shape] || t.icon;
+      var swatch = (on && t.id !== 'erase' && t.id !== 'pan')
+        ? '<i class="cf-ink-tip" style="background:' + esc(ink.color) + '"></i>' : '';
+      return '<span class="cf-ink-slot' + (on ? ' on' : '') + (t.id === 'laser' ? ' laser' : '') + '">'
+        + '<button class="cf-ink-btn' + (on ? ' on' : '')
+        + '" type="button" data-action="ink-tool" data-t="' + t.id + '"'
+        + ' data-tip="' + esc(t.title) + '" aria-label="' + esc(t.title) + '">'
+        + icon + swatch + '</button>'
+        + (on && t.id !== 'pan'
+            ? '<button class="cf-ink-chev' + (ink.opts ? ' open' : '') + '" type="button"'
+              + ' data-action="ink-opts" aria-label="' + esc(t.title) + '选项">⌄</button>'
+            : '')
+        + '</span>';
+    }).join('');
+
+    var actions = (canDraw && ink.on && ink.tool !== 'laser' && ink.tool !== 'pan')
+      ? '<span class="cf-ink-sep"></span>'
+        + '<button class="cf-ink-btn" type="button" data-action="ink-undo" data-tip="撤销 ⌘Z">' + ICON.undo + '</button>'
+        + '<button class="cf-ink-btn" type="button" data-action="ink-redo" data-tip="重做 ⌘⇧Z">' + ICON.redo + '</button>'
+        + '<button class="cf-ink-btn" type="button" data-action="ink-clear" data-tip="清空全部标注">' + ICON.trash + '</button>'
+      : '';
+
+    bar.innerHTML = '<span class="cf-ink-grip" data-ink-grip title="拖动可移动工具条"></span>'
+      + tools + actions + this.inkOptsHtml();
+    /* 入场动画只在浮层「从无到有」那一次播。否则任何重建都会重播一遍，看起来就是一闪一闪 */
+    var optsEl = bar.querySelector('[data-ink-opts]');
+    if (optsEl && !this._optsWasOpen) optsEl.classList.add('just-open');
+    this._optsWasOpen = !!ink.opts;
+    if (!bar.dataset.keepfocus) {
+      bar.dataset.keepfocus = '1';
+      bar.addEventListener('mousedown', function (ev) {
+        /* 文字框开着的时候，点工具条不该让它失焦——不然改颜色/字号就直接落笔了 */
+        if (self._textBox && !ev.target.closest('[data-ink-grip]')) ev.preventDefault();
+      });
+    }
+    this.bindInkDrag();
+    this.bindInkTips(bar);
+    this.bindInkKeys();
+    this.applyInkBarPos();
+    this.syncOptsDirection();
+    this.bindInkOptsInputs();
+    this.paintInkPreview();
+    this.syncUndoButtons();
+    void self;
+  };
+
+  /* 悬停（桌面）/ 按一下（平板）都弹一小会儿说明。
+     平板没有 hover，光靠 title 属性是看不到的。 */
+  CecpApp.prototype.bindInkTips = function (bar) {
+    if (!bar || bar.dataset.tipbound) return;
+    bar.dataset.tipbound = '1';
+    var self = this, tip = null, showT = 0, hideT = 0;
+
+    var kill = function () {
+      clearTimeout(showT); clearTimeout(hideT);
+      if (tip) { tip.classList.remove('on'); }
+    };
+    var show = function (el) {
+      var text = el && el.dataset.tip;
+      if (!text) return kill();
+      if (!tip) {
+        tip = document.createElement('span');
+        tip.className = 'cf-ink-tipbox';
+        bar.appendChild(tip);
+      }
+      tip.textContent = text;
+      /* 贴在按钮正下方（工具条在下半屏时改成正上方，跟浮层同向） */
+      var bb = bar.getBoundingClientRect(), eb = el.getBoundingClientRect();
+      tip.style.left = (eb.left - bb.left + eb.width / 2) + 'px';
+      tip.classList.toggle('above', bar.classList.contains('opts-up'));
+      tip.classList.add('on');
+      clearTimeout(hideT);
+      hideT = setTimeout(function () { if (tip) tip.classList.remove('on'); }, 1400);
+    };
+
+    bar.addEventListener('pointerover', function (ev) {
+      if (ev.pointerType !== 'mouse') return;            /* 触摸走下面那条 */
+      var el = ev.target.closest && ev.target.closest('[data-tip]');
+      clearTimeout(showT);
+      if (!el) return kill();
+      showT = setTimeout(function () { show(el); }, 380);
+    });
+    bar.addEventListener('pointerout', function (ev) {
+      if (ev.pointerType === 'mouse') kill();
+    });
+    /* 触摸：按下就弹，1.4s 自己消失，不影响正常点击 */
+    bar.addEventListener('pointerdown', function (ev) {
+      if (ev.pointerType === 'mouse') return;
+      var el = ev.target.closest && ev.target.closest('[data-tip]');
+      if (el) show(el);
+    });
+    void self;
+  };
+
+  /* ⌘Z / Ctrl+Z 撤销，⌘⇧Z / Ctrl+Y 重做 */
+  CecpApp.prototype.bindInkKeys = function () {
+    if (this._inkKeysBound) return;
+    this._inkKeysBound = true;
+    var self = this;
+    this._inkKeyHandler = function (ev) {
+      if (self.destroyed || !self.useLiveUI || !self.ink) return;
+      /* 正在打字就不抢快捷键 */
+      var t = ev.target;
+      if (self._textBox || (t && /^(INPUT|TEXTAREA)$/.test(t.tagName))) return;
+      var mod = ev.metaKey || ev.ctrlKey;
+      if (!mod) return;
+      var k = String(ev.key || '').toLowerCase();
+      if (k === 'z' && !ev.shiftKey) { ev.preventDefault(); self.inkUndo(); }
+      else if ((k === 'z' && ev.shiftKey) || k === 'y') { ev.preventDefault(); self.inkRedo(); }
+    };
+    document.addEventListener('keydown', this._inkKeyHandler);
+  };
+
+  /* 只改选中态和数值，不动 DOM 结构。
+     以前每点一个选项都整条 innerHTML 重建，浮层被销毁重建 → 入场动画重播 →
+     肉眼看就是「一闪一闪」，顺带面板的滚动位置也被重置。 */
+  CecpApp.prototype.refreshInkOpts = function () {
+    var bar = this.$stage && this.$stage.querySelector('[data-ink-bar]');
+    if (!bar) return;
+    var ink = this.ink, self = this;
+
+    /* 工具条上那颗当前颜色的小点 */
+    var tip = bar.querySelector('.cf-ink-tip');
+    if (tip) tip.style.background = ink.color;
+    /* 形状工具的图标跟着当前形状走 */
+    if (ink.on && ink.tool === 'shape') {
+      var sbtn = bar.querySelector('.cf-ink-btn[data-t="shape"]');
+      var sic = sbtn && sbtn.querySelector('.cf-ic-tool');
+      if (sic && SHAPE_ICON[ink.shape]) sic.outerHTML = SHAPE_ICON[ink.shape];
+    }
+
+    var box = bar.querySelector('[data-ink-opts]');
+    if (!box) return;
+
+    var mark = function (sel, test) {
+      var els = box.querySelectorAll(sel);
+      for (var i = 0; i < els.length; i++) els[i].classList.toggle('on', !!test(els[i]));
+    };
+    mark('[data-action="ink-color"]', function (el) {
+      return String(el.dataset.c).toLowerCase() === String(ink.color).toLowerCase();
+    });
+    mark('[data-action="ink-shape"]', function (el) { return el.dataset.s === ink.shape; });
+    mark('[data-action="ink-pen-type"]', function (el) { return el.dataset.p === ink.pen; });
+    mark('[data-action="ink-laser-mode"]', function (el) { return el.dataset.m === ink.laserMode; });
+    mark('[data-action="ink-erase-size"]', function (el) { return +el.dataset.i === ink.eraseSize; });
+    var et = ink.eraseType || (ink.eraseWhole ? 'stroke' : 'std');
+    mark('[data-action="ink-erase-type"]', function (el) { return el.dataset.e === et; });
+
+    /* 橡皮那行说明跟着类型换 */
+    var tipEl = box.querySelector('.cf-gn-tip');
+    if (tipEl) {
+      var m = ERASE_TYPES.filter(function (x) { return x.id === et; })[0];
+      if (m) tipEl.textContent = m.tip;
+    }
+
+    /* 开关 */
+    var rows = box.querySelectorAll('[data-action="ink-toggle"]');
+    for (var r = 0; r < rows.length; r++) {
+      var k = rows[r].dataset.k;
+      var sw = rows[r].querySelector('.cf-gn-sw');
+      if (sw) sw.classList.toggle('on', k === 'lowLag' ? ink.lowLag !== false : !!ink[k]);
+    }
+
+    /* 滑杆：正在拖的那根别去动它的 value，不然会跟手打架 */
+    var rg = box.querySelectorAll('[data-ink-set]');
+    for (var g = 0; g < rg.length; g++) {
+      var k2 = rg[g].dataset.inkSet;
+      if (box.getRootNode().activeElement !== rg[g]) rg[g].value = self.inkOptValue(k2);
+      var lab = rg[g].parentNode.querySelector('b');
+      if (lab) lab.textContent = self.inkOptLabel(k2);
+    }
+    this.paintInkPreview();
+  };
+
+  /* 滑杆位置（0~100），跟 inkOptLabel 一一对应 */
+  CecpApp.prototype.inkOptValue = function (k) {
+    var ink = this.ink;
+    if (k === 'width') return Math.round((ink.width - 1) / 15 * 100);
+    if (k === 'hlWidth') return Math.round((ink.hlWidth - 4) / 26 * 100);
+    if (k === 'hlAlpha') return Math.round(ink.hlAlpha * 100);
+    return Math.round((ink[k] || 0) * 100);
+  };
+
+  /* 浮层往上开还是往下开：看工具条被挪到哪儿了，下面塞不下就往上开，
+     箭头方向跟着一起翻，永远指向浮层出现的那一侧。 */
+  /* 面板最高不超过谱区，超出就内部滚（不同设备高度差很大，写死没用） */
+  CecpApp.prototype.syncOptsMaxHeight = function (bar) {
+    var box = bar && bar.querySelector('[data-ink-opts]');
+    if (!box) return;
+    var host = bar.offsetParent || bar.parentElement;
+    if (!host) return;
+    var hb = host.getBoundingClientRect(), bb = bar.getBoundingClientRect();
+    var up = bar.classList.contains('opts-up');
+    var room = up ? (bb.top - hb.top) : (hb.bottom - bb.bottom);
+    box.style.setProperty('--cf-opts-max', Math.max(180, room - 22) + 'px');
+  };
+
+  CecpApp.prototype.syncOptsDirection = function () {
+    var bar = this.$stage && this.$stage.querySelector('[data-ink-bar]');
+    if (!bar) return;
+    var host = bar.offsetParent || bar.parentElement;
+    if (!host) return;
+    var hb = host.getBoundingClientRect(), bb = bar.getBoundingClientRect();
+    var opts = bar.querySelector('[data-ink-opts]');
+    var need = opts ? opts.getBoundingClientRect().height + 18 : 150;   /* 没开时按典型高度预判 */
+    var below = hb.bottom - bb.bottom;
+    var above = bb.top - hb.top;
+    bar.classList.toggle('opts-up', below < need && above > below);
+    this.syncOptsMaxHeight(bar);
+  };
+
+  /* 工具条可拖动（GoodNotes 那样想放哪放哪），位置记在 localStorage */
+  CecpApp.prototype.bindInkDrag = function () {
+    var bar = this.$stage && this.$stage.querySelector('[data-ink-bar]');
+    var grip = bar && bar.querySelector('[data-ink-grip]');
+    if (!bar || !grip || grip.dataset.bound) return;
+    grip.dataset.bound = '1';
+    var self = this, start = null;
+
+    grip.addEventListener('pointerdown', function (ev) {
+      ev.preventDefault();
+      try { grip.setPointerCapture(ev.pointerId); } catch (err) {}
+      var host = bar.offsetParent || bar.parentElement;
+      var hb = host.getBoundingClientRect(), bb = bar.getBoundingClientRect();
+      start = { x: ev.clientX, y: ev.clientY, left: bb.left - hb.left, top: bb.top - hb.top,
+                maxX: (host.clientWidth || hb.width) - bb.width,
+                maxY: (host.clientHeight || hb.height) - bb.height };
+      bar.classList.add('dragging');
+    });
+
+    grip.addEventListener('pointermove', function (ev) {
+      if (!start) return;
+      ev.preventDefault();
+      var x = Math.max(6, Math.min(start.maxX - 6, start.left + (ev.clientX - start.x)));
+      var y = Math.max(6, Math.min(start.maxY - 6, start.top + (ev.clientY - start.y)));
+      self.inkBarPos = { x: x, y: y };
+      self.applyInkBarPos();
+      self.syncOptsDirection();   /* 拖到下半屏就自动改成往上开 */
+    });
+
+    var end = function () {
+      if (!start) return;
+      start = null;
+      bar.classList.remove('dragging');
+      self.applyInkBarPos();              /* 松手把放大收回去 */
+      if (self.inkBarPos) {
+        try { lsSet(self.storeKey('inkbar'), JSON.stringify(self.inkBarPos)); } catch (err) {}
+      }
+    };
+    grip.addEventListener('pointerup', end);
+    grip.addEventListener('pointercancel', end);
+  };
+
+  CecpApp.prototype.applyInkBarPos = function () {
+    var bar = this.$stage && this.$stage.querySelector('[data-ink-bar]');
+    if (!bar) return;
+    if (this.inkBarPos === undefined) {
+      this.inkBarPos = parseJsonMaybe(lsGet(this.storeKey('inkbar'))) || null;
+    }
+    var p = this.inkBarPos;
+    if (!p) return;                       /* 没拖过就用 CSS 默认的顶部居中 */
+    var host = bar.offsetParent || bar.parentElement;
+    if (!host) return;
+    var bb = bar.getBoundingClientRect();
+    /* 用 clientWidth/Height（可视区），不用 rect —— 容器本身是可滚动的，
+       rect 拿到的是内容盒，横向滚出去之后夹不住工具条 */
+    var hw = host.clientWidth || host.getBoundingClientRect().width;
+    var hh = host.clientHeight || host.getBoundingClientRect().height;
+    /* 容器变窄时别把工具条留在屏幕外 */
+    var x = Math.max(6, Math.min(Math.max(6, hw - bb.width - 6), p.x));
+    var y = Math.max(6, Math.min(Math.max(6, hh - bb.height - 6), p.y));
+    /* 定位一律走 transform：CSS 里 .cf-ink-bar 有 left:50%，内联 left 在某些
+       布局下推不动它；translate 直接作用在合成层上，既稳又不触发重排。
+       拖动中稍微放大一点点，跟手感更明显。 */
+    bar.style.left = '0';
+    bar.style.top = '0';
+    bar.style.transform = 'translate(' + Math.round(x) + 'px,' + Math.round(y) + 'px)'
+      + (bar.classList.contains('dragging') ? ' scale(1.04)' : '');
+  };
+
+  /* ────────────────────────────────────────────
+     工具选项浮层 —— 照 GoodNotes 的面板做：
+     标题 / 实时笔迹预览 / 笔型卡片 / 滑杆 / 分组开关
+  ──────────────────────────────────────────── */
+
+  var TOOL_TITLE = { pen: '笔', hl: '荧光笔', shape: '形状', text: '文字', erase: '橡皮擦', laser: '激光笔' };
+  /* 橡皮三型，跟 GoodNotes 一致 */
+  var ERASE_TYPES = [
+    { id: 'fine',   name: '精细橡皮擦', tip: '只擦掉碰到的那一小段' },
+    { id: 'std',    name: '标准橡皮擦', tip: '高效擦除，不留任何痕迹' },
+    { id: 'stroke', name: '笔画橡皮擦', tip: '碰到哪一笔就整笔擦掉' }
+  ];
+
+  CecpApp.prototype.inkOptsHtml = function () {
+    var ink = this.ink;
+    if (!ink.on || !ink.opts || ink.tool === 'pan') return '';
+
+    /* —— 小积木 —— */
+    function sec(label) { return '<div class="cf-gn-sec">' + esc(label) + '</div>'; }
+    function slider(key, label, val, min, max, fmt) {
+      return '<div class="cf-gn-slide">'
+        + '<div class="cf-gn-slide-hd"><span>' + esc(label) + '</span><b>' + esc(fmt) + '</b></div>'
+        + '<input class="cf-gn-range" type="range" data-ink-set="' + key + '"'
+        + ' min="' + min + '" max="' + max + '" step="1" value="' + val + '" aria-label="' + esc(label) + '">'
+        + '</div>';
+    }
+    function toggle(key, label, on) {
+      return '<button class="cf-gn-row" type="button" data-action="ink-toggle" data-k="' + key + '">'
+        + '<span>' + esc(label) + '</span>'
+        + '<i class="cf-gn-sw' + (on ? ' on' : '') + '"></i></button>';
+    }
+    function cards(action, dataKey, list, cur) {
+      return '<div class="cf-gn-cards">' + list.map(function (x) {
+        var on = cur === x.id;
+        return '<button class="cf-gn-card' + (on ? ' on' : '') + '" type="button"'
+          + ' data-action="' + action + '" data-' + dataKey + '="' + x.id + '">'
+          + '<span class="cf-gn-card-ic">' + (x.icon || x.art || '') + '</span>'
+          + '<span class="cf-gn-card-tx">' + esc(x.name) + '</span></button>';
+      }).join('') + '</div>';
+    }
+    function colors() {
+      var self2 = ink;
+      var mine = (ink.custom || []);
+      var rows2 = INK_PALETTE.map(function (row, ri) {
+        var cells = row.map(swatch).join('');
+        /* 自定义色接在最后一排后面，再跟一个「+」 */
+        if (ri === INK_PALETTE.length - 1) {
+          cells += mine.map(swatch).join('')
+            + '<button class="cf-gn-addcolor" type="button" data-action="ink-color-custom" aria-label="自定义颜色">+</button>';
+        }
+        return '<div class="cf-gn-prow">' + cells + '</div>';
+      }).join('');
+      function swatch(c) {
+        return '<button class="cf-gn-sw-c' + (self2.color.toLowerCase() === c.toLowerCase() ? ' on' : '') + '"'
+          + ' type="button" data-action="ink-color" data-c="' + c + '"'
+          + ' style="background:' + c + '" aria-label="颜色 ' + c + '"></button>';
+      }
+      return sec('颜色') + '<div class="cf-gn-palette">' + rows2 + '</div>';
+    }
+    function preview() { return '<canvas class="cf-gn-prev" data-ink-prev></canvas>'; }
+    function wrap(title, body) {
+      return '<div class="cf-ink-opts" data-ink-opts>'
+        + '<div class="cf-gn-title">' + esc(title) + '</div>' + body + '</div>';
+    }
+
+    var b = '';
+
+    if (ink.tool === 'pen') {
+      b += preview();
+      b += cards('ink-pen-type', 'p', PEN_TYPES, ink.pen);
+      b += '<div class="cf-gn-group">'
+        + slider('width', '笔尖', Math.round((ink.width - 1) / 15 * 100), 0, 100, Math.round((ink.width - 1) / 15 * 100) + '%')
+        + slider('press', '压力灵敏度', Math.round(ink.press * 100), 0, 100, Math.round(ink.press * 100) + '%')
+        + slider('flat', '笔尖扁平度', Math.round(ink.flat * 100), 0, 100, ink.flat < 0.05 ? '圆头' : (ink.flat > 0.95 ? '凿头' : Math.round(ink.flat * 100) + '%'))
+        + slider('stab', '画笔稳定性', Math.round(ink.stab * 100), 0, 100, Math.round(ink.stab * 100) + '%')
+        + '</div>';
+      b += sec('设置') + '<div class="cf-gn-rows">' + toggle('lowLag', '减少滞后', ink.lowLag !== false) + '</div>';
+      b += colors();
+      return wrap(TOOL_TITLE.pen, b);
+    }
+
+    if (ink.tool === 'hl') {
+      b += preview();
+      b += '<div class="cf-gn-group">'
+        + slider('hlWidth', '笔尖', Math.round((ink.hlWidth - 4) / 26 * 100), 0, 100, Math.round((ink.hlWidth - 4) / 26 * 100) + '%')
+        + slider('hlAlpha', '不透明度', Math.round(ink.hlAlpha * 100), 10, 90, Math.round(ink.hlAlpha * 100) + '%')
+        + slider('stab', '画笔稳定性', Math.round(ink.stab * 100), 0, 100, Math.round(ink.stab * 100) + '%')
+        + '</div>';
+      b += sec('设置') + '<div class="cf-gn-rows">'
+        + toggle('lowLag', '减少滞后', ink.lowLag !== false)
+        + toggle('hlStraight', '直线绘制', !!ink.hlStraight) + '</div>';
+      b += colors();
+      return wrap(TOOL_TITLE.hl, b);
+    }
+
+    if (ink.tool === 'erase') {
+      var et = ink.eraseType || (ink.eraseWhole ? 'stroke' : 'std');
+      b += cards('ink-erase-type', 'e', ERASE_TYPES.map(function (x) {
+        return { id: x.id, name: x.name, icon: ICON.erase };
+      }), et, 'etype');
+      var tip = (ERASE_TYPES.filter(function (x) { return x.id === et; })[0] || ERASE_TYPES[1]).tip;
+      b += '<div class="cf-gn-tip">' + esc(tip) + '</div>';
+      b += '<div class="cf-gn-sizes">' + ERASE_SIZES.map(function (sz, i) {
+        var d = 12 + i * 8;
+        return '<button class="cf-ink-w' + (ink.eraseSize === i ? ' on' : '') + '" type="button"'
+          + ' data-action="ink-erase-size" data-i="' + i + '" aria-label="橡皮大小" style="width:38px;height:38px">'
+          + '<i style="width:' + d + 'px;height:' + d + 'px;border-radius:50%;background:currentColor;opacity:.8"></i>'
+          + '</button>';
+      }).join('') + '</div>';
+      b += sec('设置') + '<div class="cf-gn-rows">' + toggle('eraseHlOnly', '只擦荧光笔', !!ink.eraseHlOnly) + '</div>';
+      return wrap(TOOL_TITLE.erase, b);
+    }
+
+    if (ink.tool === 'shape') {
+      b += '<div class="cf-gn-shapes">' + SHAPE_CYCLE.map(function (x) {
+        return '<button class="cf-opt-shape' + (ink.shape === x ? ' on' : '') + '" type="button"'
+          + ' data-action="ink-shape" data-s="' + x + '" title="' + x + '">' + SHAPE_ICON[x] + '</button>';
+      }).join('') + '</div>';
+      b += '<div class="cf-gn-group">'
+        + slider('width', '线宽', Math.round((ink.width - 1) / 15 * 100), 0, 100, Math.round((ink.width - 1) / 15 * 100) + '%')
+        + '</div>';
+      b += sec('设置') + '<div class="cf-gn-rows">' + toggle('shapeFill', '填充颜色', !!ink.shapeFill) + '</div>';
+      b += colors();
+      return wrap(TOOL_TITLE.shape, b);
+    }
+
+    if (ink.tool === 'text') {
+      b += '<div class="cf-gn-group">'
+        + slider('width', '字号', Math.round((ink.width - 1) / 15 * 100), 0, 100, Math.max(13, Math.round(ink.width * 4.5)) + 'px')
+        + '</div>';
+      b += colors();
+      return wrap(TOOL_TITLE.text, b);
+    }
+
+    /* 激光笔：两张带示意图的卡（GoodNotes 就是「点 / 线」两张） */
+    b += cards('ink-laser-mode', 'm', [
+      { id: 'dot',  name: '点', art: '<span class="cf-gn-laser-dot"></span>' },
+      { id: 'line', name: '线', art: '<span class="cf-gn-laser-line"></span>' }
+    ], ink.laserMode);
+    b += colors();
+    return wrap(TOOL_TITLE.laser, b);
+  };
+
+  /* 面板里的滑杆要 input 事件，事件委托（click）接不到，单独绑一次 */
+  CecpApp.prototype.bindInkOptsInputs = function () {
+    var bar = this.$stage && this.$stage.querySelector('[data-ink-bar]');
+    var box = bar && bar.querySelector('[data-ink-opts]');
+    if (!box || box.dataset.bound) return;
+    box.dataset.bound = '1';
+    var self = this;
+    box.addEventListener('input', function (ev) {
+      var el = ev.target.closest ? ev.target.closest('[data-ink-set]') : null;
+      if (!el) return;
+      var k = el.dataset.inkSet, v = +el.value / 100;
+      if (k === 'width') self.ink.width = 1 + v * 15;
+      else if (k === 'hlWidth') self.ink.hlWidth = 4 + v * 26;
+      else if (k === 'hlAlpha') self.ink.hlAlpha = v;
+      else self.ink[k] = v;
+      self.saveInkPrefs();
+      self.syncTextBoxStyle();
+      /* 只更新数字和预览，不重建整块——重建会打断拖动 */
+      var hd = el.parentNode.querySelector('b');
+      if (hd) hd.textContent = self.inkOptLabel(k);
+      self.paintInkPreview();
+    });
+    /* 拖滑杆时别让谱跟着滚 */
+    box.addEventListener('touchmove', function (ev) { ev.stopPropagation(); }, { passive: true });
+  };
+
+  CecpApp.prototype.inkOptLabel = function (k) {
+    var ink = this.ink;
+    if (k === 'width') {
+      if (ink.tool === 'text') return Math.max(13, Math.round(ink.width * 4.5)) + 'px';
+      return Math.round((ink.width - 1) / 15 * 100) + '%';
+    }
+    if (k === 'hlWidth') return Math.round((ink.hlWidth - 4) / 26 * 100) + '%';
+    if (k === 'hlAlpha') return Math.round(ink.hlAlpha * 100) + '%';
+    if (k === 'flat') return ink.flat < 0.05 ? '圆头' : (ink.flat > 0.95 ? '凿头' : Math.round(ink.flat * 100) + '%');
+    return Math.round((ink[k] || 0) * 100) + '%';
+  };
+
+  /* 点在哪个文字上（从最上面那层往下找） */
+  CecpApp.prototype.findTextAt = function (p) {
+    var box = this._inkBox;
+    if (!box) return null;
+    var ar = box.w / (box.h || 1);
+    for (var i = this.ink.strokes.length - 1; i >= 0; i--) {
+      var st = this.ink.strokes[i];
+      if (st.tool !== 'text') continue;
+      if (this.strokeHit(st, p, 0.012, ar)) return st;
+    }
+    return null;
+  };
+
+  /* 「+」自定义颜色：借系统取色器，选完存进自定义那一排 */
+  CecpApp.prototype.pickCustomInkColor = function () {
+    var self = this;
+    var inp = document.createElement('input');
+    inp.type = 'color';
+    inp.value = this.ink.color || '#ff3b30';
+    inp.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+    document.body.appendChild(inp);
+    inp.addEventListener('change', function () {
+      var c = inp.value;
+      if (!self.ink.custom) self.ink.custom = [];
+      if (self.ink.custom.indexOf(c) < 0) {
+        self.ink.custom.push(c);
+        if (self.ink.custom.length > 8) self.ink.custom.shift();
+      }
+      self.ink.color = c;
+      self.saveInkPrefs();
+      self.syncTextBoxStyle();
+      self.renderInkBar();
+    });
+    inp.addEventListener('blur', function () {
+      setTimeout(function () { if (inp.parentNode) inp.parentNode.removeChild(inp); }, 300);
+    });
+    try { inp.click(); } catch (err) {}
+  };
+
+  CecpApp.prototype.saveInkPrefs = function () {
+    var i = this.ink;
+    try {
+      lsSet(this.storeKey('inkpen'), JSON.stringify({
+        pen: i.pen, width: i.width, press: i.press, flat: i.flat, stab: i.stab,
+        hlWidth: i.hlWidth, hlAlpha: i.hlAlpha, hlStraight: i.hlStraight,
+        lowLag: i.lowLag, shapeFill: i.shapeFill,
+        eraseType: i.eraseType, eraseSize: i.eraseSize, eraseHlOnly: i.eraseHlOnly,
+        color: i.color, custom: i.custom
+      }));
+    } catch (err) {}
+  };
+
+  /* 面板顶部那条实时笔迹：用真正的 drawStroke 画，所以调什么都立刻看得到 */
+  CecpApp.prototype.paintInkPreview = function () {
+    var bar = this.$stage && this.$stage.querySelector('[data-ink-bar]');
+    var cv = bar && bar.querySelector('[data-ink-prev]');
+    if (!cv) return;
+    var w = cv.clientWidth || 244, h = cv.clientHeight || 84;
+    var dpr = Math.min(2, window.devicePixelRatio || 1);
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    var ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+
+    /* 一条 S 形，速度两头慢中间快 → 钢笔会自然出现粗细变化 */
+    var pts = [];
+    for (var i = 0; i <= 46; i++) {
+      var t = i / 46;
+      var x = 0.08 + t * 0.84;
+      var y = 0.5 - Math.sin(t * Math.PI * 2) * 0.26;
+      var speed = 0.35 + Math.sin(t * Math.PI) * 0.65;      /* 中段快 */
+      pts.push([x, y, 1.35 - speed * 0.8]);
+    }
+    this.drawStroke(ctx, this.strokeMeta({ pts: pts }), { w: w, h: h, k: 0.62 });
+  };
+  CecpApp.prototype.mountInkLayer = function () {
+    var stage = this.$stage && this.$stage.querySelector('[data-score-stage]');
+    if (!stage) return;
+    var host = stage.querySelector('[data-score-img]') || stage.querySelector('[data-jianpu]');
+    if (!host) { this.inkEls = null; return; }
+
+    /* 包一层相对定位容器，把画布叠上去 */
+    var wrap = stage.querySelector('.cf-ink-wrap');
+    if (!wrap || !wrap.contains(host)) {
+      wrap = document.createElement('div');
+      wrap.className = 'cf-ink-wrap';
+      host.parentNode.insertBefore(wrap, host);
+      wrap.appendChild(host);
+      var c1 = document.createElement('canvas'); c1.className = 'cf-ink-canvas idle'; c1.dataset.inkCanvas = '1';
+      var c2 = document.createElement('canvas'); c2.className = 'cf-laser-canvas'; c2.dataset.laserCanvas = '1';
+      wrap.appendChild(c1); wrap.appendChild(c2);
+    }
+    this.inkEls = {
+      wrap: wrap, host: host,
+      ink: wrap.querySelector('[data-ink-canvas]'),
+      laser: wrap.querySelector('[data-laser-canvas]')
+    };
+    this.bindInkPointer();
+    this.observeInkSize();
+    this.resizeInkCanvas();
+  };
+
+  /* 谱盒不只在窗口 resize 时会变：切原图/移调、改缩放、开合歌单抽屉、
+     图片加载完成……都会变。盯住盒子本身最省心。 */
+  CecpApp.prototype.observeInkSize = function () {
+    var e = this.inkEls, self = this;
+    if (!e || !window.ResizeObserver) return;
+    if (this._inkRO) this._inkRO.disconnect();
+    this._inkRO = new ResizeObserver(function () {
+      if (self.destroyed || !self.inkEls) return;
+      /* 一帧一次就够，观察者可能连着报好几次 */
+      if (self._inkROraf) return;
+      self._inkROraf = requestAnimationFrame(function () {
+        self._inkROraf = 0;
+        if (!self.destroyed && self.inkEls) self.resizeInkCanvas();
+      });
+    });
+    this._inkRO.observe(e.host);
+  };
+
+  CecpApp.prototype.resizeInkCanvas = function () {
+    var e = this.inkEls;
+    if (!e) return;
+    var r = e.host.getBoundingClientRect();
+    if (!r.width || !r.height) return;
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    [e.ink, e.laser].forEach(function (c) {
+      c.width = Math.round(r.width * dpr);
+      c.height = Math.round(r.height * dpr);
+      var ctx = c.getContext('2d');
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    });
+    this._inkBox = { w: r.width, h: r.height };
+    this.redrawInk();
+  };
+
+  /* 把所有已知笔画重绘一遍（换歌 / 缩放 / 收到别人的笔都走这里） */
+  CecpApp.prototype.redrawInk = function () {
+    var e = this.inkEls, box = this._inkBox;
+    if (!e || !box) return;
+    var ctx = e.ink.getContext('2d');
+    ctx.clearRect(0, 0, box.w, box.h);
+    var self = this;
+    this.ink.strokes.forEach(function (s) { self.drawStroke(ctx, s, box); });
+    if (this._drawing) this.drawStroke(ctx, this._drawing, box);
+  };
+
+  /* 画的过程中用这个：一帧最多重绘一次。
+     指针事件在 iPad 上能到 120Hz，每个事件都全量重绘会明显拖慢笔迹。 */
+  CecpApp.prototype.scheduleInkRedraw = function () {
+    if (this._inkRaf) return;
+    var self = this;
+    this._inkRaf = requestAnimationFrame(function () {
+      self._inkRaf = 0;
+      if (!self.destroyed) self.redrawInk();
+    });
+  };
+
+  /* 用当前笔设置组装一条笔画记录（同步出去的就是这个，别人渲染才会一模一样） */
+  CecpApp.prototype.strokeMeta = function (o) {
+    var i = this.ink, t = o.tool || i.tool;
+    return {
+      id: o.id || nowId('ink'),
+      tool: t,
+      shape: o.shape || (t === 'shape' ? i.shape : 'free'),
+      color: o.color || i.color,
+      width: o.width != null ? o.width : (t === 'hl' ? i.hlWidth : i.width),
+      pen: o.pen || i.pen,
+      flat: o.flat != null ? o.flat : i.flat,
+      alpha: o.alpha != null ? o.alpha : (t === 'hl' ? i.hlAlpha : 1),
+      fill: o.fill != null ? o.fill : (t === 'shape' ? !!i.shapeFill : false),
+      text: o.text,
+      pts: o.pts || []
+    };
+  };
+
+  CecpApp.prototype.drawStroke = function (ctx, s, box) {
+    var pts = s.pts || [];
+    if (!pts.length) return;
+    var P = pts.map(function (p) { return [p[0] * box.w, p[1] * box.h, p[2] == null ? 1 : p[2]]; });
+    var k = inkScale(box);            /* 粗细/字号跟着谱盒缩放，各设备看着一样粗 */
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = s.width * k;
+
+    /* 文字：一个锚点 + 内容，字号跟着笔画粗细走 */
+    if (s.tool === 'text') {
+      var fs = Math.max(13, s.width * 4.5) * k;
+      ctx.font = '600 ' + fs + 'px -apple-system,BlinkMacSystemFont,"PingFang SC",system-ui,sans-serif';
+      ctx.fillStyle = s.color;
+      ctx.textBaseline = 'top';
+      String(s.text || '').split('\n').forEach(function (line, i) {
+        ctx.fillText(line, P[0][0], P[0][1] + i * fs * 1.25);
+      });
+      ctx.restore();
+      return;
+    }
+
+    /* 笔型：圆珠笔恒定、钢笔跟压感/速度变、画笔更粗更软 */
+    var pen = s.pen || 'fountain';
+    var base = s.width * k;
+    if (s.tool === 'hl') { ctx.globalAlpha = s.alpha || 0.35; }
+    else if (pen === 'brush') { ctx.globalAlpha = 0.86; base = s.width * 1.45 * k; }
+    else if (pen === 'ball') { ctx.globalAlpha = 0.97; }
+    var varying = (s.tool === 'pen' && pen !== 'ball');
+    var flat = s.flat || 0, NIB = -Math.PI / 4;      /* 凿头笔尖的朝向 */
+
+    var a = P[0], b = P[P.length - 1];
+
+    /* 形状：直线 / 矩形 / 椭圆 / 箭头 */
+    if (s.tool === 'shape' && s.shape !== 'free' && P.length >= 2) {
+      ctx.beginPath();
+      if (s.shape === 'line') { ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]); }
+      else if (s.shape === 'rect') { ctx.rect(a[0], a[1], b[0] - a[0], b[1] - a[1]); }
+      else if (s.shape === 'ellipse') {
+        ctx.ellipse((a[0] + b[0]) / 2, (a[1] + b[1]) / 2,
+          Math.abs(b[0] - a[0]) / 2, Math.abs(b[1] - a[1]) / 2, 0, 0, Math.PI * 2);
+      } else if (s.shape === 'arrow') {
+        ctx.moveTo(a[0], a[1]); ctx.lineTo(b[0], b[1]);
+        var ang = Math.atan2(b[1] - a[1], b[0] - a[0]), h = Math.max(9, s.width * 3) * k;
+        ctx.moveTo(b[0], b[1]); ctx.lineTo(b[0] - h * Math.cos(ang - 0.42), b[1] - h * Math.sin(ang - 0.42));
+        ctx.moveTo(b[0], b[1]); ctx.lineTo(b[0] + 0, b[1] + 0);
+        ctx.lineTo(b[0] - h * Math.cos(ang + 0.42), b[1] - h * Math.sin(ang + 0.42));
+      }
+      /* 闭合图形可以填充（GoodNotes 的「填充颜色」） */
+      if (s.fill && (s.shape === 'rect' || s.shape === 'ellipse')) {
+        ctx.save(); ctx.globalAlpha = (ctx.globalAlpha || 1) * 0.22;
+        ctx.fillStyle = s.color; ctx.fill(); ctx.restore();
+      }
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
+    /* 粗细恒定：一笔画完最省，也最顺 */
+    if (!varying && !flat) {
+      ctx.beginPath();
+      if (P.length < 3) {
+        ctx.moveTo(P[0][0], P[0][1]);
+        for (var i2 = 1; i2 < P.length; i2++) ctx.lineTo(P[i2][0], P[i2][1]);
+      } else {
+        ctx.moveTo(P[0][0], P[0][1]);
+        for (var k = 1; k < P.length - 1; k++) {
+          ctx.quadraticCurveTo(P[k][0], P[k][1],
+            (P[k][0] + P[k + 1][0]) / 2, (P[k][1] + P[k + 1][1]) / 2);
+        }
+        ctx.lineTo(P[P.length - 1][0], P[P.length - 1][1]);
+      }
+      ctx.stroke();
+      ctx.restore();
+      return;
+    }
+
+    /* 粗细会变：逐段画，节点仍取中点做二次贝塞尔，所以既有粗细变化也不见棱角 */
+    if (P.length < 3) {
+      ctx.beginPath(); ctx.moveTo(P[0][0], P[0][1]);
+      for (var i3 = 1; i3 < P.length; i3++) ctx.lineTo(P[i3][0], P[i3][1]);
+      ctx.stroke(); ctx.restore(); return;
+    }
+    var prevM = [(P[0][0] + P[1][0]) / 2, (P[0][1] + P[1][1]) / 2];
+    ctx.beginPath(); ctx.moveTo(P[0][0], P[0][1]); ctx.lineTo(prevM[0], prevM[1]);
+    ctx.lineWidth = base * (P[0][2] || 1); ctx.stroke();
+    for (var j = 1; j < P.length - 1; j++) {
+      var m1 = [(P[j][0] + P[j + 1][0]) / 2, (P[j][1] + P[j + 1][1]) / 2];
+      var lw = base * (varying ? (P[j][2] || 1) : 1);
+      if (flat) {
+        var th = Math.atan2(m1[1] - prevM[1], m1[0] - prevM[0]);
+        lw *= 1 - flat * 0.82 * (1 - Math.abs(Math.sin(th - NIB)));
+      }
+      ctx.lineWidth = Math.max(0.35, lw);
+      ctx.beginPath();
+      ctx.moveTo(prevM[0], prevM[1]);
+      ctx.quadraticCurveTo(P[j][0], P[j][1], m1[0], m1[1]);
+      ctx.stroke();
+      prevM = m1;
+    }
+    ctx.beginPath();
+    ctx.lineWidth = Math.max(0.35, base * (P[P.length - 1][2] || 1));
+    ctx.moveTo(prevM[0], prevM[1]);
+    ctx.lineTo(P[P.length - 1][0], P[P.length - 1][1]);
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  /* 每个采样点的粗细系数：Apple Pencil 走真压感，手指/鼠标退回「快=细、慢=粗」 */
+  CecpApp.prototype.penWidthFactor = function (ev, p, prev) {
+    var ink = this.ink;
+    if (ink.tool !== 'pen') return 1;
+    if (ink.pen === 'ball') return 1;                 /* 圆珠笔恒定 */
+    var f;
+    var pr = (typeof ev.pressure === 'number' && ev.pressure > 0 && ev.pressure !== 0.5) ? ev.pressure : -1;
+    if (pr >= 0) {
+      f = 0.4 + pr * 1.25;                            /* 真压感 */
+    } else {
+      var box = this._inkBox || { w: 900, h: 900 };
+      var dx = (p[0] - prev[0]) * box.w, dy = (p[1] - prev[1]) * box.h;
+      var v = Math.sqrt(dx * dx + dy * dy);
+      f = 1.3 - Math.min(1, v / 22) * 0.8;            /* 划得越快越细 */
+    }
+    if (ink.pen === 'brush') f = 0.65 + (f - 0.65) * 1.4;
+    /* 压力灵敏度 = 这个变化生效多少；0 就完全恒定 */
+    return Math.max(0.18, 1 + (f - 1) * (ink.press == null ? 0.5 : ink.press));
+  };
+
+  CecpApp.prototype.bindInkPointer = function () {
+    var e = this.inkEls, self = this;
+    if (!e || e.ink.dataset.bound) return;
+    e.ink.dataset.bound = '1';
+
+    var norm = function (ev) {
+      var r = e.host.getBoundingClientRect();
+      return [(ev.clientX - r.left) / (r.width || 1), (ev.clientY - r.top) / (r.height || 1)];
+    };
+
+    e.ink.addEventListener('pointerdown', function (ev) {
+      if (!self.ink.on) return;
+      ev.preventDefault();
+      try { e.ink.setPointerCapture(ev.pointerId); } catch (err) {}
+      var p = norm(ev);
+      if (self.ink.tool === 'laser') {
+        self._laserPts = [p];
+        self.sendLaser(false);
+        return;
+      }
+      if (self.ink.tool === 'erase') { self.eraseAt(p); return; }
+      /* 文字：点到已有的字就是拖它，点空白才是新起一个框 */
+      if (self.ink.tool === 'text') {
+        var hitT = self.findTextAt(p);
+        if (hitT) {
+          self.closeTextBox();
+          self._movingText = {
+            st: hitT,
+            before: JSON.parse(JSON.stringify(hitT)),
+            grab: p,
+            from: [hitT.pts[0][0], hitT.pts[0][1]]
+          };
+          return;
+        }
+        self.openTextBox(p);
+        return;
+      }
+      self._drawing = self.strokeMeta({ pts: [[p[0], p[1], 1]] });
+      self._penPrev = null;
+    });
+
+    e.ink.addEventListener('pointermove', function (ev) {
+      if (!self.ink.on) return;
+      var p = norm(ev);
+      if (self.ink.tool === 'laser') {
+        if (!self._laserPts) return;
+        ev.preventDefault();
+        self._laserPts.push(p);
+        if (self.ink.laserMode === 'dot') self._laserPts = [p];
+        else if (self._laserPts.length > 48) self._laserPts.shift();   /* 拖尾够长就行，越多越慢 */
+        /* 一帧最多画一次：指针事件 120Hz，逐个画必卡 */
+        if (!self._laserRafDraw) {
+          self._laserRafDraw = requestAnimationFrame(function () {
+            self._laserRafDraw = 0;
+            if (self.destroyed || !self._laserPts) return;
+            self.paintLaser(self._laserPts, self.ink.color, self.ink.laserMode);
+          });
+        }
+        self.sendLaser(false);
+        return;
+      }
+      if (self.ink.tool === 'erase') { if (ev.buttons) self.eraseAt(p); return; }
+      if (self._movingText) {
+        ev.preventDefault();
+        var mv = self._movingText;
+        mv.st.pts[0][0] = mv.from[0] + (p[0] - mv.grab[0]);
+        mv.st.pts[0][1] = mv.from[1] + (p[1] - mv.grab[1]);
+        mv.moved = true;
+        self.scheduleInkRedraw();
+        return;
+      }
+      if (!self._drawing) return;
+      ev.preventDefault();
+      var d = self._drawing;
+      /* 形状、以及开了「直线绘制」的荧光笔：只留首尾两点 */
+      if (d.shape !== 'free' || (d.tool === 'hl' && self.ink.hlStraight)) {
+        d.pts = [d.pts[0], [p[0], p[1], 1]];
+        self.scheduleInkRedraw();
+        return;
+      }
+      var lastP = d.pts[d.pts.length - 1];
+      /* 画笔稳定性：把落点往上一点拉，手抖就被磨掉（GoodNotes 的「画笔稳定性」） */
+      var st = self.ink.stab || 0;
+      if (st > 0) {
+        var k2 = 1 - st * 0.8;
+        p = [lastP[0] + (p[0] - lastP[0]) * k2, lastP[1] + (p[1] - lastP[1]) * k2];
+      }
+      /* 太密的点丢掉：既省重绘，也让平滑曲线更顺（手抖不会被忠实记录） */
+      var dx = p[0] - lastP[0], dy = p[1] - lastP[1];
+      if (dx * dx + dy * dy < 0.0000045) return;
+      d.pts.push([p[0], p[1], self.penWidthFactor(ev, p, lastP)]);
+      self.scheduleInkRedraw();
+    });
+
+    var finish = function (ev) {
+      if (self.ink.tool === 'laser') {
+        if (self._laserPts) {
+          self.sendLaser(true);
+          var lp = self._laserPts;
+          self._laserPts = null;
+          self._laserLast = lp;
+          self.fadeLaser(lp, self.ink.color, self.ink.laserMode);
+        }
+        return;
+      }
+      if (self._movingText) {
+        var mt = self._movingText;
+        self._movingText = null;
+        if (mt.moved) {
+          var key2 = self.currentSongKey();
+          /* 位置变了：先撤掉旧的，再按同一个 id 重新广播 */
+          self.wsSend({ type: 'ink', op: 'undo', song: key2, id: mt.st.id });
+          self.wsSend({ type: 'ink', op: 'stroke', song: key2, stroke: mt.st });
+          self.pushInkOp({ del: [mt.before], add: [JSON.parse(JSON.stringify(mt.st))] });
+          self.redrawInk();
+        }
+        return;
+      }
+      var d = self._drawing;
+      self._drawing = null;
+      if (!d || d.pts.length < 1) return;
+      if (d.shape === 'free' && d.pts.length < 2) d.pts.push([d.pts[0][0] + 0.001, d.pts[0][1] + 0.001]);
+      self.ink.strokes.push(d);
+      self.pushInkOp({ del: [], add: [d] });
+      self.redrawInk();
+      self.wsSend({ type: 'ink', op: 'stroke', song: self.currentSongKey(), stroke: d });
+      void ev;
+    };
+    e.ink.addEventListener('pointerup', finish);
+    e.ink.addEventListener('pointercancel', finish);
+    e.ink.addEventListener('pointerleave', function (ev) { if (self._drawing) finish(ev); });
+  };
+
+  /* 没开工具时画布不能拦触摸，否则谱都滑不动了 */
+  CecpApp.prototype.syncInkInteractive = function () {
+    if (!this.inkEls) return;
+    /* 「滑动」= 画布不吃事件，谱照常滚动、和弦照常能点 */
+    this.inkEls.ink.classList.toggle('idle', !this.ink.on || this.ink.tool === 'pan');
+  };
+
+  /* 标注的归属键 = 这首歌 + 当前视图。
+     原图和移调是两张完全不同的画面（尺寸、排版都不一样），标注必须各画各的，
+     否则在原图上画的记号跑到简谱上会全乱。同步也按这个键分流。 */
+  CecpApp.prototype.currentSongKey = function () {
+    var s = this.live && this.live.songs[this.live.i];
+    var id = (s && (s.id || s.title)) || 'unknown';
+    var view = (this.live && this.live.view === 'trans') ? 'trans' : 'img';
+    return id + '@' + view;
+  };
+
+  /* 橡皮：跟 GoodNotes 一样有大小、以及「整条擦 / 局部擦」两种模式。
+     局部擦 = 只抹掉碰到的那一段，剩下的断成几条继续留着。 */
+  /* 点谱面直接长出一个输入框，写完点别处/回车就落笔（GoodNotes 的文字框） */
+  CecpApp.prototype.openTextBox = function (p) {
+    var e = this.inkEls, self = this;
+    if (!e) return;
+    this.closeTextBox();
+
+    var box = document.createElement('textarea');
+    box.className = 'cf-ink-textbox';
+    box.rows = 1;
+    box.setAttribute('placeholder', '写点什么…');
+    /* 注意：必须挂在 wrap 上。host 常常是 <img>，空元素的子节点永远不渲染（clientHeight=0） */
+    var hb = e.host.getBoundingClientRect(), wb = e.wrap.getBoundingClientRect();
+    box.style.left = (hb.left - wb.left + p[0] * hb.width) + 'px';
+    box.style.top = (hb.top - wb.top + p[1] * hb.height) + 'px';
+    box.style.color = this.ink.color;
+    box.style.fontSize = Math.max(13, this.ink.width * 4.5) * inkScale(this._inkBox) + 'px';
+    e.wrap.appendChild(box);
+    this._textBox = box;
+
+    var grow = function () {
+      if (box.dataset.manual) return;     /* 用户自己拖过右下角就不再自动改高 */
+      /* 先压到 0 再读 scrollHeight；用 auto 的话 textarea 会退回 rows 的高度，量出来偏大 */
+      box.style.height = '0px';
+      box.style.height = (box.scrollHeight + 2) + 'px';
+    };
+    var commit = function (save) {
+      if (self._textBox !== box) return;
+      self._textBox = null;
+      var txt = save ? String(box.value || '').trim() : '';
+      box.classList.add('out');
+      setTimeout(function () { if (box.parentNode) box.parentNode.removeChild(box); }, 140);
+      if (!txt) return;
+      var ts = { id: nowId('ink'), tool: 'text', shape: 'free', text: txt.slice(0, 240),
+                 color: self.ink.color, width: self.ink.width, pts: [p] };
+      self.ink.strokes.push(ts);
+      self.pushInkOp({ del: [], add: [ts] });
+      self.redrawInk();
+      self.wsSend({ type: 'ink', op: 'stroke', song: self.currentSongKey(), stroke: ts });
+    };
+
+    box._commit = commit;
+    box.addEventListener('input', grow);
+    box.addEventListener('blur', function () { commit(true); });
+    box.addEventListener('keydown', function (ev) {
+      ev.stopPropagation();
+      if (ev.key === 'Escape') { ev.preventDefault(); commit(false); }
+      /* 回车落笔，Shift+回车换行 */
+      else if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); commit(true); }
+    });
+    /* 别让输入框上的手势被画布的 pointerdown 抢走；点右下角那块 = 手动调大小 */
+    box.addEventListener('pointerdown', function (ev) {
+      ev.stopPropagation();
+      var r2 = box.getBoundingClientRect();
+      if (ev.clientX > r2.right - 18 && ev.clientY > r2.bottom - 18) box.dataset.manual = '1';
+    });
+
+    requestAnimationFrame(function () {
+      box.classList.add('in');
+      try { box.focus(); } catch (err) {}
+      grow();
+    });
+  };
+
+  /* 打字过程中换颜色/字号，框里立刻跟着变（所见即所得） */
+  CecpApp.prototype.syncTextBoxStyle = function () {
+    var box = this._textBox;
+    if (!box) return;
+    box.style.color = this.ink.color;
+    box.style.fontSize = Math.max(13, this.ink.width * 4.5) * inkScale(this._inkBox) + 'px';
+  };
+
+  CecpApp.prototype.closeTextBox = function () {
+    var box = this._textBox;
+    if (!box) return;
+    /* 走 commit：正在打的字要落下去，不能白打 */
+    if (box._commit) { box._commit(true); return; }
+    this._textBox = null;
+    if (box.parentNode) box.parentNode.removeChild(box);
+  };
+
+  /* 一次操作统一记成 {del, add}：撤销就是把 add 拿掉、把 del 放回；重做反过来。
+     画一笔 = add 一条；整条擦 = del 若干条；局部擦 = del 原条 + add 碎片；清空 = del 全部。 */
+  CecpApp.prototype.pushInkOp = function (op) {
+    if (!op || (!(op.del || []).length && !(op.add || []).length)) return;
+    this.ink.undoStack.push(op);
+    if (this.ink.undoStack.length > 60) this.ink.undoStack.shift();
+    this.ink.redoStack.length = 0;      /* 新操作一来，重做链就断了 */
+    this.syncUndoButtons();
+  };
+
+  /* reverse=true 是撤销，false 是重做 */
+  CecpApp.prototype.applyInkOp = function (op, reverse) {
+    var key = this.currentSongKey(), self = this;
+    var remove = reverse ? (op.add || []) : (op.del || []);
+    var restore = reverse ? (op.del || []) : (op.add || []);
+    var kill = {};
+    remove.forEach(function (x) { kill[x.id] = 1; });
+    this.ink.strokes = this.ink.strokes.filter(function (x) { return !kill[x.id]; });
+    remove.forEach(function (x) {
+      self.wsSend({ type: 'ink', op: 'undo', song: key, id: x.id });
+    });
+    restore.forEach(function (x) {
+      self.ink.strokes.push(x);
+      self.wsSend({ type: 'ink', op: 'stroke', song: key, stroke: x });
+    });
+    this.redrawInk();
+  };
+
+  CecpApp.prototype.inkUndo = function () {
+    var op = this.ink.undoStack.pop();
+    if (!op) { this.flash('没有可撤销的了'); return; }
+    this.applyInkOp(op, true);
+    this.ink.redoStack.push(op);
+    this.syncUndoButtons();
+  };
+
+  CecpApp.prototype.inkRedo = function () {
+    var op = this.ink.redoStack.pop();
+    if (!op) { this.flash('没有可重做的了'); return; }
+    this.applyInkOp(op, false);
+    this.ink.undoStack.push(op);
+    this.syncUndoButtons();
+  };
+
+  /* 没得撤销/重做时按钮压暗，别让人白点 */
+  CecpApp.prototype.syncUndoButtons = function () {
+    var bar = this.$stage && this.$stage.querySelector('[data-ink-bar]');
+    if (!bar) return;
+    var u = bar.querySelector('[data-action="ink-undo"]');
+    var r = bar.querySelector('[data-action="ink-redo"]');
+    if (u) u.classList.toggle('dim', !this.ink.undoStack.length);
+    if (r) r.classList.toggle('dim', !this.ink.redoStack.length);
+  };
+
+  /* 橡皮命中判定：不能只看采样点。
+     形状只存首尾两点、文字只存一个锚点，光比对顶点的话中间怎么擦都擦不掉。 */
+  CecpApp.prototype.strokeHit = function (st, p, r, ar) {
+    var pts = st.pts || [];
+    if (!pts.length) return false;
+    /* 统一换算到「按 x 归一」的坐标系，圆才是圆 */
+    var X = function (q) { return [q[0], q[1] / (ar || 1)]; };
+    var P = X(p);
+    var d2seg = function (a, b) {
+      var A = X(a), B = X(b);
+      var vx = B[0] - A[0], vy = B[1] - A[1];
+      var L = vx * vx + vy * vy;
+      var t = L ? Math.max(0, Math.min(1, ((P[0] - A[0]) * vx + (P[1] - A[1]) * vy) / L)) : 0;
+      var dx = P[0] - (A[0] + t * vx), dy = P[1] - (A[1] + t * vy);
+      return Math.sqrt(dx * dx + dy * dy);
+    };
+
+    /* 文字：按渲染出来的文字盒子算（字号由 width 决定） */
+    if (st.tool === 'text') {
+      var box = this._inkBox || { w: 900, h: 900 };
+      var fs = Math.max(13, st.width * 4.5) * inkScale(box);
+      var lines = String(st.text || '').split('\n');
+      var wpx = Math.max.apply(null, lines.map(function (L) { return L.length * fs * 0.62; }));
+      var hpx = lines.length * fs * 1.25;
+      var x0 = pts[0][0], y0 = pts[0][1];
+      var x1 = x0 + wpx / (box.w || 1), y1 = y0 + hpx / (box.h || 1);
+      return p[0] > x0 - r && p[0] < x1 + r && p[1] > y0 - r * ar && p[1] < y1 + r * ar;
+    }
+
+    var a = pts[0], b = pts[pts.length - 1];
+    if (st.shape && st.shape !== 'free') {
+      if (st.shape === 'line' || st.shape === 'arrow') return d2seg(a, b) < r;
+      if (st.shape === 'rect') {
+        var c1 = [a[0], a[1]], c2 = [b[0], a[1]], c3 = [b[0], b[1]], c4 = [a[0], b[1]];
+        if (st.fill) {   /* 填充了就整块都能擦 */
+          return p[0] > Math.min(a[0], b[0]) - r && p[0] < Math.max(a[0], b[0]) + r
+              && p[1] > Math.min(a[1], b[1]) - r * ar && p[1] < Math.max(a[1], b[1]) + r * ar;
+        }
+        return d2seg(c1, c2) < r || d2seg(c2, c3) < r || d2seg(c3, c4) < r || d2seg(c4, c1) < r;
+      }
+      if (st.shape === 'ellipse') {
+        var cx = (a[0] + b[0]) / 2, cy = (a[1] + b[1]) / 2;
+        var rx = Math.abs(b[0] - a[0]) / 2, ry = Math.abs(b[1] - a[1]) / 2;
+        if (!rx || !ry) return false;
+        var nx = (p[0] - cx) / rx, ny = (p[1] - cy) / ry;
+        var k = Math.sqrt(nx * nx + ny * ny);
+        if (st.fill) return k < 1 + r / Math.min(rx, ry);
+        return Math.abs(k - 1) < r / Math.min(rx, ry);   /* 贴着轮廓才算 */
+      }
+    }
+
+    /* 手写：逐段判定，笔画快的时候采样点很稀，只比对顶点会漏 */
+    if (pts.length === 1) {
+      var dx0 = P[0] - X(pts[0])[0], dy0 = P[1] - X(pts[0])[1];
+      return Math.sqrt(dx0 * dx0 + dy0 * dy0) < r;
+    }
+    for (var i = 1; i < pts.length; i++) if (d2seg(pts[i - 1], pts[i]) < r) return true;
+    return false;
+  };
+
+  CecpApp.prototype.eraseAt = function (p) {
+    var box = this._inkBox;
+    if (!box) return;
+    var self = this, key = this.currentSongKey();
+    var et = this.ink.eraseType || (this.ink.eraseWhole ? 'stroke' : 'std');
+    var r = (ERASE_SIZES[this.ink.eraseSize] || ERASE_SIZES[1]) / 100;   /* 归一化半径 */
+    if (et === 'fine') r *= 0.45;                    /* 精细橡皮：碰面积小很多 */
+    var ar = box.w / (box.h || 1);
+    /* 「只擦荧光笔」开着时，其它笔迹一律跳过；默认关，字和形状都能擦 */
+    var hlOnly = !!this.ink.eraseHlOnly;
+    var erasable = function (st) { return !hlOnly || st.tool === 'hl'; };
+    var hit = function (st) { return erasable(st) && self.strokeHit(st, p, r, ar); };
+    /* 局部擦拆片段时仍按点判定 */
+    var near = function (q) {
+      var dx = q[0] - p[0], dy = (q[1] - p[1]) / (ar || 1);
+      return Math.sqrt(dx * dx + dy * dy) < r;
+    };
+
+    /* 笔画橡皮擦：碰到就整根删 */
+    if (et === 'stroke') {
+      var gone = [];
+      this.ink.strokes = this.ink.strokes.filter(function (st) {
+        if (!hit(st)) return true;
+        gone.push(st);
+        self.wsSend({ type: 'ink', op: 'undo', song: key, id: st.id });
+        return false;
+      });
+      if (gone.length) { this.pushInkOp({ del: gone, add: [] }); this.redrawInk(); }
+      return;
+    }
+
+    /* 局部擦：把被碰到的点挖掉，一条拆成若干段 */
+    var changed = false, out = [], delOld = [], addNew = [];
+    this.ink.strokes.forEach(function (st) {
+      var pts = st.pts || [];
+      if (!hit(st)) { out.push(st); return; }
+      changed = true;
+      self.wsSend({ type: 'ink', op: 'undo', song: key, id: st.id });   /* 先把原来那条撤掉 */
+      delOld.push(st);
+      /* 文字和形状没法半截擦，碰到就整个删 */
+      if (st.tool === 'text' || (st.shape && st.shape !== 'free')) return;
+      var seg = [];
+      pts.forEach(function (q) {
+        if (near(q)) {
+          if (seg.length > 1) { var f = self.splitStroke(st, seg, key); out.push(f); addNew.push(f); }
+          seg = [];
+        } else seg.push(q);
+      });
+      if (seg.length > 1) { var f2 = self.splitStroke(st, seg, key); out.push(f2); addNew.push(f2); }
+    });
+    if (changed) {
+      this.ink.strokes = out;
+      this.pushInkOp({ del: delOld, add: addNew });
+      this.redrawInk();
+    }
+  };
+
+  /* 拆出来的新片段：换个新 id 重新广播，别人那边才对得上 */
+  CecpApp.prototype.splitStroke = function (src, pts, key) {
+    var ns = { id: nowId('ink'), tool: src.tool, shape: 'free', text: src.text,
+               color: src.color, width: src.width, by: src.by, pts: pts.slice() };
+    this.wsSend({ type: 'ink', op: 'stroke', song: key, stroke: ns });
+    return ns;
+  };
+
+  /* ── 激光笔：本地即时画，同时广播给别人 ── */
+  /* 真激光的观感：炽白核心 + 彩色光晕 + 外层弥散；线模式还要拖尾渐隐（越旧越淡越细）。
+     alpha 参数用于松手后的整体渐隐动画。 */
+  function laserRgb(color) {
+    var c = String(color || '#ff3b30').trim();
+    if (c.charAt(0) === '#') {
+      if (c.length === 4) c = '#' + c[1] + c[1] + c[2] + c[2] + c[3] + c[3];
+      var n = parseInt(c.slice(1), 16);
+      return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+    }
+    var m = c.match(/(\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+    return m ? [+m[1], +m[2], +m[3]] : [255, 59, 48];
+  }
+
+  CecpApp.prototype.paintLaser = function (pts, color, mode, alpha) {
+    var e = this.inkEls, box = this._inkBox;
+    if (!e || !box || !pts || !pts.length) return;
+    var ctx = e.laser.getContext('2d');
+    ctx.clearRect(0, 0, box.w, box.h);
+    var a = alpha === undefined ? 1 : Math.max(0, Math.min(1, alpha));
+    if (a <= 0) return;
+    var k = inkScale(box);                    /* 光点大小也得跟着谱盒走 */
+    var rgb = laserRgb(color);
+    var rgba = function (al) { return 'rgba(' + rgb[0] + ',' + rgb[1] + ',' + rgb[2] + ',' + al + ')'; };
+    var P = pts.map(function (p) { return [p[0] * box.w, p[1] * box.h]; });
+
+    ctx.save();
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.shadowBlur = 0;                        /* 绝对不能开：每段一次高斯模糊会掉帧 */
+
+    /* 拖尾：一条从尾到头逐渐变粗变亮的锥形光带。
+       逐段画，节点取相邻两点的中点、原始点当控制点，这样是圆滑曲线不是折线。 */
+    if (mode === 'line' && P.length > 2) {
+      var n = P.length;
+      /* 尾巴不要太长，短促才像激光笔（也省画） */
+      var from = Math.max(1, n - 30);
+      var seg = function (i, w, col, al) {
+        var m0 = [(P[i - 1][0] + P[i][0]) / 2, (P[i - 1][1] + P[i][1]) / 2];
+        var m1 = [(P[i][0] + P[i + 1][0]) / 2, (P[i][1] + P[i + 1][1]) / 2];
+        ctx.globalAlpha = al;
+        ctx.strokeStyle = col;
+        ctx.lineWidth = w;
+        ctx.beginPath();
+        ctx.moveTo(m0[0], m0[1]);
+        ctx.quadraticCurveTo(P[i][0], P[i][1], m1[0], m1[1]);
+        ctx.stroke();
+      };
+      for (var i = from; i < n - 1; i++) {
+        var t = (i - from) / Math.max(1, n - 1 - from);   /* 0 尾 → 1 头 */
+        var ease = t * t;
+        /* 外辉光：宽、淡 */
+        seg(i, (7.5 * (0.3 + 0.7 * ease)) * k, rgba(1), a * 0.18 * (0.05 + 0.95 * ease));
+        /* 主体：饱和 */
+        seg(i, (3.2 * (0.35 + 0.65 * ease)) * k, rgba(1), a * 0.7 * (0.06 + 0.94 * ease));
+        /* 白芯只在靠头的三分之一 */
+        if (t > 0.62) seg(i, 1.15 * k, 'rgba(255,255,255,1)', a * 0.8 * (t - 0.62) / 0.38);
+      }
+    }
+
+    /* 光点本体：紧一点、更饱和，才像 GoodNotes 那颗；散得太开会发灰 */
+    var last = P[P.length - 1];
+    ctx.globalAlpha = a;
+    var R = 15 * k;
+    var halo = ctx.createRadialGradient(last[0], last[1], 0, last[0], last[1], R);
+    halo.addColorStop(0, rgba(0.85));
+    halo.addColorStop(0.35, rgba(0.34));
+    halo.addColorStop(1, rgba(0));
+    ctx.fillStyle = halo;
+    ctx.beginPath(); ctx.arc(last[0], last[1], R, 0, Math.PI * 2); ctx.fill();
+
+    var r2 = 5.4 * k;
+    var core = ctx.createRadialGradient(last[0], last[1], 0, last[0], last[1], r2);
+    core.addColorStop(0, 'rgba(255,255,255,1)');
+    core.addColorStop(0.42, rgba(1));
+    core.addColorStop(1, rgba(0.1));
+    ctx.fillStyle = core;
+    ctx.beginPath(); ctx.arc(last[0], last[1], r2, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = 'rgba(255,255,255,0.98)';
+    ctx.beginPath(); ctx.arc(last[0], last[1], 1.6 * k, 0, Math.PI * 2); ctx.fill();
+    ctx.restore();
+  };
+
+  CecpApp.prototype.fadeLaser = function (pts, color, mode) {
+    var self = this;
+    var last = (pts && pts.length) ? pts.slice() : (this._laserLast || null);
+    var col = color || this.ink.color;
+    var md = mode || this.ink.laserMode;
+    clearTimeout(this._laserFade);
+    if (this._laserRaf) { cancelAnimationFrame(this._laserRaf); this._laserRaf = 0; }
+    if (!last) return;
+    var hold = md === 'dot' ? 280 : 420;   /* 先停留一下，再化开 */
+    var dur = md === 'dot' ? 420 : 700;
+    this._laserFade = setTimeout(function () {
+      var t0 = 0;
+      var step = function (ts) {
+        if (self.destroyed) return;
+        if (!t0) t0 = ts;
+        var k = Math.min(1, (ts - t0) / dur);
+        self.paintLaser(last, col, md, 1 - k);
+        if (k < 1) self._laserRaf = requestAnimationFrame(step);
+        else {
+          self._laserRaf = 0;
+          var e = self.inkEls, box = self._inkBox;
+          if (e && box) e.laser.getContext('2d').clearRect(0, 0, box.w, box.h);
+        }
+      };
+      self._laserRaf = requestAnimationFrame(step);
+    }, hold);
+  };
+
+  CecpApp.prototype.sendLaser = function (done) {
+    if (!this._laserPts || !this.wsReady()) return;
+    /* 限流：最多 ~20fps，别把连接刷爆 */
+    var now = Date.now();
+    if (!done && this._laserSentAt && now - this._laserSentAt < 50) return;
+    this._laserSentAt = now;
+    this.wsSend({ type: 'laser', mode: this.ink.laserMode, color: this.ink.color,
+                  pts: this._laserPts.slice(-60), done: !!done });
+  };
+
   CecpApp.prototype.musiclibUrl = function (songId, full) {
     var qs = [];
     if (this.musiclibKey) qs.push('key=' + encodeURIComponent(this.musiclibKey));
@@ -3069,6 +4807,27 @@
     stage.classList.remove('is-frame');
     if (showChords) this.renderJianpu(stage, x, steps);
     this.applyLiveZoom();
+
+    /* 标注层：换歌/换视图后重新挂，并把这首歌已有的记号拉回来 */
+    var selfIL = this;
+    var mount = function () {
+      if (selfIL.destroyed) return;
+      selfIL.mountInkLayer();
+      selfIL.syncInkInteractive();
+      selfIL.renderInkBar();
+    };
+    var imgEl = stage.querySelector('[data-score-img]');
+    if (imgEl && !imgEl.complete) imgEl.addEventListener('load', mount, { once: true });
+    mount();
+    setTimeout(mount, 400);   /* 简谱渲染完尺寸才稳 */
+
+    var key = this.currentSongKey();
+    if (this.ink.song !== key) {
+      this.ink.song = key;
+      this.ink.strokes = [];
+      this.redrawInk();
+      if (this.wsReady()) this.wsSend({ type: 'ink_get', song: key });
+    }
   };
 
   /* 用真引擎渲染简谱（老格式 / align:strict 严格模式都由引擎自己认） */
@@ -3138,11 +4897,14 @@
   };
 
   CecpApp.prototype.applyLiveZoom = function () {
+    /* 缩放放在 .cf-ink-wrap 上，让画布跟着谱一起缩，标注才不会错位 */
+    var wrap = this.$stage.querySelector('.cf-ink-wrap');
     var img = this.$stage.querySelector('[data-score-img]');
+    var target = wrap || img;
     var label = this.$stage.querySelector('[data-zoom-label]');
-    if (img) {
-      img.style.transformOrigin = 'top center';
-      img.style.transform = 'scale(' + (this.live.zoom / 100) + ')';
+    if (target) {
+      target.style.transformOrigin = 'top center';
+      target.style.transform = 'scale(' + (this.live.zoom / 100) + ')';
     }
     if (label) label.textContent = this.live.zoom + '%';
   };
@@ -3953,10 +5715,22 @@
     clearTimeout(this.midnightTimer);
     clearTimeout(this.flashTimer);
     clearTimeout(this.liveBannerTimer);
+    clearTimeout(this._laserFade);
+    clearTimeout(this._laserRemoteFade);
+    if (this._laserRaf) { try { cancelAnimationFrame(this._laserRaf); } catch (err) {} this._laserRaf = 0; }
+    if (this._inkRaf) { try { cancelAnimationFrame(this._inkRaf); } catch (err) {} this._inkRaf = 0; }
     if (this.docKeyHandler) {
       document.removeEventListener('keydown', this.docKeyHandler);
       this.docKeyHandler = null;
     }
+    if (this._inkRO) { try { this._inkRO.disconnect(); } catch (err) {} this._inkRO = null; }
+    if (this._inkROraf) { try { cancelAnimationFrame(this._inkROraf); } catch (err) {} this._inkROraf = 0; }
+    if (this._inkKeyHandler) {
+      document.removeEventListener('keydown', this._inkKeyHandler);
+      this._inkKeyHandler = null;
+      this._inkKeysBound = false;
+    }
+    this.closeTextBox();
     if (this.viewportHandler) {
       window.removeEventListener('resize', this.viewportHandler);
       window.removeEventListener('orientationchange', this.viewportHandler);

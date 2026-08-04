@@ -8,7 +8,7 @@
    只缓存静态文件。WebSocket 不走 fetch 事件，这里完全不碰它。
    ============================================================ */
 
-const CACHE_VERSION = 'v3';
+const CACHE_VERSION = 'v5';
 const CACHE_NAME = 'lamezia-intercom-' + CACHE_VERSION;
 
 /* 全部用相对路径：GitHub Pages 上站点挂在 /<仓库名>/ 子路径下，
