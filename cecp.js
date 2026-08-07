@@ -28,6 +28,7 @@
      data-default-preset    自动选中的设备名
      data-page-key          localStorage 隔离键（默认 location.pathname）
      data-app-name          教会 / 应用名，显示在各界面标题（默认 LAMEZIA 敬拜内通）
+     data-org-name          页脚署名的教会名（缺省用 data-app-name）
      data-auto-role         menu 模式下直达上次身份（operator / client，由入口页写入）
      data-member-chat="0"   关闭成员群聊
      样式全部在 Shadow DOM 内，与宿主页面 CSS 完全隔离；同页可多实例。
@@ -642,6 +643,16 @@
     '.cf-ink-btn.on{color:#fff}',
     '.cf-ink-sep{width:1px;height:20px;background:rgba(255,255,255,.16);margin:0 4px}',
     '.cf-ink-btn.dim{opacity:.32}',
+    /* 页脚：跟官网底部那条版权一个意思，淡淡一行就好 */
+    '.cf-foot{flex:none;text-align:center;font-size:10.5px;letter-spacing:.4px;',
+    '  color:var(--muted);opacity:.62;padding:4px 10px 7px;user-select:none;-webkit-user-select:none}',
+    '.cf-foot b{font-weight:600}',
+    /* 收起态：一个小圆钮 */
+    '.cf-ink-bar.mini{padding:0;border-radius:50%}',
+    '.cf-ink-mini{flex:none;width:46px;height:46px;border-radius:50%;color:rgba(255,255,255,.92);',
+    '  display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none}',
+    '.cf-ink-mini:active{cursor:grabbing}',
+    '.cf-ink-mini .cf-ic-tool{width:22px;height:22px}',
     /* 悬停/长按说明气泡 */
     '.cf-ink-tipbox{position:absolute;top:calc(100% + 8px);transform:translateX(-50%) translateY(-3px);',
     '  padding:4px 9px;border-radius:7px;white-space:nowrap;pointer-events:none;',
@@ -665,6 +676,7 @@
     '  .cf-gn-prev{height:62px}',
     '  .cf-gn-sw-c,.cf-gn-addcolor{width:23px;height:23px}',
     '  .cf-gn-prow{gap:7px}',
+    '  .cf-ink-mini{width:42px;height:42px}',
     '}',
     '@media (max-width:400px){',
     '  .cf-ink-btn{width:27px;height:30px}',
@@ -859,7 +871,16 @@
     '.cf-song .grow{flex:1;min-width:0}',
     /* 选歌器 */
     '.cf-setlist-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px}',
-    '.cf-song-row{display:flex;align-items:center;gap:2px}',
+    '.cf-song-row{display:flex;align-items:center;gap:2px;transition:transform .17s cubic-bezier(.3,.9,.4,1)}',
+    /* 拖动把手：只有它吃手势，行别处照常能点、抽屉照常能滚 */
+    '.cf-song-grip{flex:none;width:28px;height:34px;display:inline-flex;align-items:center;justify-content:center;',
+    '  cursor:grab;touch-action:none;color:var(--muted);border-radius:8px}',
+    '.cf-song-grip:active{cursor:grabbing;color:var(--text)}',
+    '.cf-song-grip i{display:block;width:14px;height:1.8px;border-radius:2px;background:currentColor;',
+    '  box-shadow:0 -4.5px 0 currentColor,0 4.5px 0 currentColor}',
+    '.cf-song-row.drag{transition:none;position:relative;z-index:5}',
+    '.cf-song-row.drag .cf-song{box-shadow:0 8px 22px rgba(0,0,0,.22)}',
+    '[data-setlist].reordering{-webkit-user-select:none;user-select:none}',
     '.cf-song-row .cf-song{flex:1;min-width:0}',
     '.cf-song-x{flex:none;width:26px;height:26px;border-radius:8px;background:var(--card3);color:var(--muted);font-size:12px;',
     '  display:flex;align-items:center;justify-content:center}',
@@ -1196,6 +1217,8 @@
     /* 撤销 / 清空 */
     undo: svg('<path d="M4 9h11a4.5 4.5 0 0 1 0 9H9"/><path d="M7.5 5.5L4 9l3.5 3.5"/>'),
     redo: svg('<path d="M20 9H9a4.5 4.5 0 0 0 0 9h6"/><path d="M16.5 5.5L20 9l-3.5 3.5"/>'),
+    /* 收起成小圆钮（Apple Notes 那种） */
+    fold: svg('<circle cx="12" cy="12" r="8.2"/><path d="M15.2 10.4l-3.2 3.2-3.2-3.2"/>', { w: 1.5 }),
     trash: svg('<path d="M4.5 6.5h15"/><path d="M9.5 6.5V5a1.2 1.2 0 0 1 1.2-1.2h2.6A1.2 1.2 0 0 1 14.5 5v1.5"/>'
       + '<path d="M6.6 6.5l.9 12a1.6 1.6 0 0 0 1.6 1.5h5.8a1.6 1.6 0 0 0 1.6-1.5l.9-12"/>'),
   };
@@ -1298,6 +1321,8 @@
     this.autoRole = String(d.autoRole || '').trim().toLowerCase();
     /* 教会名统一走 data-app-name（config.js 里改一处即可），不再散落在各界面里 */
     this.appName = String(d.appName || 'LAMEZIA 敬拜内通').trim() || 'LAMEZIA 敬拜内通';
+    /* 页脚署名的教会名。上游硬编码的是 CECP 自己的教会，fork 必须能改。 */
+    this.orgName = String(d.orgName || '').trim() || this.appName;
     this.widgetTitle = String(d.widgetTitle || this.appName);
     this.pageKey = String(d.pageKey || location.pathname || 'global').trim();
     this.defaultPreset = String(d.defaultPreset || '').trim();
@@ -1843,6 +1868,16 @@
         this.syncTextBoxStyle();
         this.refreshInkOpts();
         break;
+      case 'ink-collapse':
+        if (this.ink.tool && this.ink.tool !== 'pan') this.ink.lastTool = this.ink.tool;
+        this.ink.collapsed = true;
+        this.ink.tool = 'pan';
+        this.ink.opts = false;
+        this.closeTextBox();
+        this.saveInkPrefs();
+        this.renderInkBar();
+        this.syncInkInteractive();
+        break;
       case 'ink-undo': this.inkUndo(); break;
       case 'ink-redo': this.inkRedo(); break;
       case 'ink-clear': {
@@ -1880,16 +1915,6 @@
         this.renderSetlist();
         this.pushSetlist();
         break;
-      case 'live-set-move': {
-        var from = +el.dataset.i, to = from + (+el.dataset.d);
-        if (to >= 0 && to < this.live.songs.length) {
-          var moved = this.live.songs.splice(from, 1)[0];
-          this.live.songs.splice(to, 0, moved);
-          this.renderSetlist();
-          this.pushSetlist();
-        }
-        break;
-      }
       case 'live-prev': this.selectLiveSong(this.live.i - 1); break;
       case 'live-next': this.selectLiveSong(this.live.i + 1); break;
       case 'live-zoom':
@@ -2836,6 +2861,7 @@
       + '  </div>'
       + '  <div class="cf-setup-error' + (errorText ? ' show' : '') + '">' + esc(errorText || '') + '</div>'
       + '  <button class="cf-btn-primary" type="button" data-action="join">进入成员端</button>'
+      + '  <div class="cf-foot">© ' + esc(this.orgName) + ' · Powered by <b>YuEn</b></div>'
       + '</div>'
       + '</div>';
 
@@ -3060,7 +3086,8 @@
     if (!this.live) this.live = { songs: [], i: 0, zoom: 100, loaded: false, mode: 'img', view: 'img' };
     this.live.view = 'img';   /* 每次进现场页都从「原图」起步，点「移调」才渲简谱 */
     if (!this.ink) {
-      this.ink = { on: true, tool: 'pan', shape: 'line', color: INK_COLORS[0], width: 4,
+      this.ink = { on: true, tool: 'pan', collapsed: true, lastTool: 'pen',
+                   shape: 'line', color: INK_COLORS[0], width: 4,
                    laserMode: 'dot', eraseSize: 1, eraseWhole: false, opts: false,
                    /* 笔（GoodNotes 那套）：笔型 + 笔尖 + 压感 + 扁平度 + 稳定性 */
                    pen: 'fountain', press: 0.5, flat: 0, stab: 0.2,
@@ -3109,6 +3136,7 @@
       + '      <button class="cf-ghost-btn" type="button" data-action="live-next">下一首</button>'
       + '      <button class="cf-ghost-btn" type="button" data-action="live-lib" data-lib-btn hidden>曲库 ↗</button>'
       + '    </div>'
+      + '    <div class="cf-foot">© ' + esc(this.orgName) + ' · Powered by <b>YuEn</b></div>'
       + '  </main>'
       + '  <div class="cf-comm-mask" data-action="live-comm"></div>'
       + '  <section class="cf-live-comm">'
@@ -3246,21 +3274,23 @@
       + (this.live.songs.length
           ? this.live.songs.map(function (x, i) {
               return '<div class="cf-song-row">'
+                + (editing
+                    ? '<span class="cf-song-grip" data-set-grip title="按住上下拖，可以调顺序"><i></i></span>'
+                    : '')
                 + '<button class="cf-song' + (i === cur ? ' on' : '') + '" type="button" data-action="live-song" data-i="' + i + '">'
                 + '<span class="cf-song-no">' + (i + 1 < 10 ? '0' : '') + (i + 1) + '</span>'
                 + '<span class="grow"><span class="cf-song-t">' + esc(x.title) + '</span>'
                 + '<span class="cf-song-s">' + (x.key ? esc(x.key) + ' 调' : '') + '</span></span>'
                 + '</button>'
                 + (editing
-                    ? '<button class="cf-song-x" type="button" data-action="live-set-move" data-i="' + i + '" data-d="-1" title="上移">↑</button>'
-                      + '<button class="cf-song-x" type="button" data-action="live-set-move" data-i="' + i + '" data-d="1" title="下移">↓</button>'
-                      + '<button class="cf-song-x is-del" type="button" data-action="live-set-del" data-i="' + i + '" title="移除">✕</button>'
+                    ? '<button class="cf-song-x is-del" type="button" data-action="live-set-del" data-i="' + i + '" title="移除">✕</button>'
                     : '')
                 + '</div>';
             }).join('')
           : '<div class="cf-empty" style="padding:18px 8px">还没有选歌<br><span style="font-size:12px">点上面「选歌」加</span></div>')
       + (editing ? '<div class="cf-lib-box" data-lib-box><div class="cf-empty" style="padding:14px">曲库加载中…</div></div>' : '');
     if (editing) this.renderLibraryPicker();
+    this.bindSetlistDrag();
   };
 
   /* 选歌器：搜曲库（实时枚举 GitHub，你新加的歌也在），点一下加进歌单，全房间同步 */
@@ -3306,6 +3336,93 @@
     });
   };
 
+  /* 歌单按住上下拖着排序（原来要一下一下点 ↑↓，太慢）。
+     只有把手 [data-set-grip] 吃手势，行别的地方照常能点、抽屉照常能滚。 */
+  CecpApp.prototype.bindSetlistDrag = function () {
+    var list = this.$stage && this.$stage.querySelector('[data-setlist]');
+    if (!list || list.dataset.dragbound) return;
+    list.dataset.dragbound = '1';
+    var self = this, S = null;
+
+    var scrollerOf = function (el) {
+      var p = el.parentElement;
+      while (p) {
+        var o = getComputedStyle(p).overflowY;
+        if (o === 'auto' || o === 'scroll') return p;
+        p = p.parentElement;
+      }
+      return null;
+    };
+
+    list.addEventListener('pointerdown', function (ev) {
+      var grip = ev.target.closest && ev.target.closest('[data-set-grip]');
+      if (!grip) return;
+      var row = grip.closest('.cf-song-row');
+      if (!row) return;
+      ev.preventDefault();
+      try { grip.setPointerCapture(ev.pointerId); } catch (err) {}
+      var rows = [].slice.call(list.querySelectorAll('.cf-song-row'));
+      var rects = rows.map(function (r) { return r.getBoundingClientRect(); });
+      var idx = rows.indexOf(row);
+      /* 步距用相邻两行的间距量，别写死行高 */
+      var step = rows.length > 1
+        ? Math.abs((rects[1] || rects[0]).top - rects[0].top)
+        : rects[idx].height;
+      S = { rows: rows, rects: rects, from: idx, to: idx, row: row,
+            y0: ev.clientY, step: step || rects[idx].height,
+            scroller: scrollerOf(list) };
+      row.classList.add('drag');
+      list.classList.add('reordering');
+    });
+
+    list.addEventListener('pointermove', function (ev) {
+      if (!S) return;
+      ev.preventDefault();
+      /* 拖到上下边缘时自动滚一点，长歌单才够得着 */
+      if (S.scroller) {
+        var sb = S.scroller.getBoundingClientRect();
+        if (ev.clientY < sb.top + 46) S.scroller.scrollTop -= 9;
+        else if (ev.clientY > sb.bottom - 46) S.scroller.scrollTop += 9;
+      }
+      var dy = ev.clientY - S.y0;
+      S.row.style.transform = 'translateY(' + dy + 'px)';
+      var to = Math.max(0, Math.min(S.rows.length - 1, S.from + Math.round(dy / S.step)));
+      if (to === S.to) return;
+      S.to = to;
+      /* 其余行让开一格，先把结果演出来 */
+      S.rows.forEach(function (r, i) {
+        if (i === S.from) return;
+        var shift = 0;
+        if (S.from < to && i > S.from && i <= to) shift = -S.step;
+        else if (S.from > to && i >= to && i < S.from) shift = S.step;
+        r.style.transform = shift ? 'translateY(' + shift + 'px)' : '';
+      });
+    });
+
+    var end = function () {
+      if (!S) return;
+      var s = S; S = null;
+      s.rows.forEach(function (r) { r.style.transform = ''; });
+      s.row.classList.remove('drag');
+      list.classList.remove('reordering');
+      if (s.to !== s.from) self.moveSong(s.from, s.to);
+    };
+    list.addEventListener('pointerup', end);
+    list.addEventListener('pointercancel', end);
+  };
+
+  /* 挪一首歌的位置。当前在放的那首要跟着走，别because 序号变了就跳歌 */
+  CecpApp.prototype.moveSong = function (from, to) {
+    var songs = this.live.songs;
+    if (from === to || from < 0 || to < 0 || from >= songs.length || to >= songs.length) return;
+    var playing = songs[this.live.i];
+    songs.splice(to, 0, songs.splice(from, 1)[0]);
+    var ni = songs.indexOf(playing);
+    this.live.i = ni < 0 ? 0 : ni;
+    this.renderSetlist();
+    this.pushSetlist();
+  };
+
   /* 改完就广播出去，全房间实时同步 */
   CecpApp.prototype.pushSetlist = function () {
     if (!this.wsReady()) { this.flash('当前离线，改动没同步出去', true); return; }
@@ -3347,6 +3464,21 @@
     var bar = this.$stage && this.$stage.querySelector('[data-ink-bar]');
     if (!bar) return;
     var ink = this.ink, self = this;
+
+    /* 收起：整条变成一个小圆钮（Apple Notes 的记号笔那种），点一下展开。
+       收起时一定回到「滑动」，谱照常能滚。 */
+    if (ink.collapsed) {
+      bar.classList.add('mini');
+      bar.innerHTML = '<button class="cf-ink-mini" type="button" data-tip="标注工具"'
+        + ' aria-label="展开标注工具条">' + ICON.pen + '</button>';
+      this._optsWasOpen = false;
+      this.bindInkTips(bar);
+      this.bindInkMiniDrag();
+      this.applyInkBarPos();
+      return;
+    }
+    bar.classList.remove('mini');
+
     /* 原图和移调都能画：标注按「歌 + 视图」分开存（currentSongKey 带 @view），
        坐标归一化到当前谱盒，各画各的互不串。 */
     var canDraw = true;
@@ -3381,7 +3513,10 @@
       : '';
 
     bar.innerHTML = '<span class="cf-ink-grip" data-ink-grip title="拖动可移动工具条"></span>'
-      + tools + actions + this.inkOptsHtml();
+      + tools + actions
+      + '<span class="cf-ink-sep"></span>'
+      + '<button class="cf-ink-btn" type="button" data-action="ink-collapse" data-tip="收起工具条">' + ICON.fold + '</button>'
+      + this.inkOptsHtml();
     /* 入场动画只在浮层「从无到有」那一次播。否则任何重建都会重播一遍，看起来就是一闪一闪 */
     var optsEl = bar.querySelector('[data-ink-opts]');
     if (optsEl && !this._optsWasOpen) optsEl.classList.add('just-open');
@@ -3404,6 +3539,63 @@
     void self;
   };
 
+  CecpApp.prototype.expandInkBar = function () {
+    this.ink.collapsed = false;
+    this.ink.on = true;
+    /* 展开顺手回到上次用的笔，Apple Notes 也是点开直接能画 */
+    if (this.ink.tool === 'pan') this.ink.tool = this.ink.lastTool || 'pen';
+    this.saveInkPrefs();
+    this.renderInkBar();
+    this.syncInkInteractive();
+  };
+
+  /* 小圆钮：拖 = 挪位置，点 = 展开。不能走全局 click 委托——
+     pointerdown 里 preventDefault 之后有的 WebView 不派发 click。 */
+  CecpApp.prototype.bindInkMiniDrag = function () {
+    var bar = this.$stage && this.$stage.querySelector('[data-ink-bar]');
+    var btn = bar && bar.querySelector('.cf-ink-mini');
+    if (!btn || btn.dataset.bound) return;
+    btn.dataset.bound = '1';
+    var self = this, st = null;
+
+    btn.addEventListener('pointerdown', function (ev) {
+      ev.preventDefault();
+      try { btn.setPointerCapture(ev.pointerId); } catch (err) {}
+      var host = bar.offsetParent || bar.parentElement;
+      if (!host) return;
+      var hb = host.getBoundingClientRect(), bb = bar.getBoundingClientRect();
+      st = { x: ev.clientX, y: ev.clientY, left: bb.left - hb.left, top: bb.top - hb.top,
+             maxX: (host.clientWidth || hb.width) - bb.width,
+             maxY: (host.clientHeight || hb.height) - bb.height, moved: false };
+    });
+    btn.addEventListener('pointermove', function (ev) {
+      if (!st) return;
+      var dx = ev.clientX - st.x, dy = ev.clientY - st.y;
+      if (!st.moved && dx * dx + dy * dy < 49) return;   /* 7px 内算点按，不算拖 */
+      st.moved = true;
+      bar.classList.add('dragging');
+      self.inkBarPos = {
+        x: Math.max(6, Math.min(st.maxX - 6, st.left + dx)),
+        y: Math.max(6, Math.min(st.maxY - 6, st.top + dy))
+      };
+      self.applyInkBarPos();
+    });
+    var end = function () {
+      if (!st) return;
+      var moved = st.moved;
+      st = null;
+      bar.classList.remove('dragging');
+      self.applyInkBarPos();
+      if (moved) {
+        if (self.inkBarPos) { try { lsSet(self.storeKey('inkbar'), JSON.stringify(self.inkBarPos)); } catch (err) {} }
+      } else {
+        self.expandInkBar();
+      }
+    };
+    btn.addEventListener('pointerup', end);
+    btn.addEventListener('pointercancel', end);
+  };
+
   /* 悬停（桌面）/ 按一下（平板）都弹一小会儿说明。
      平板没有 hover，光靠 title 属性是看不到的。 */
   CecpApp.prototype.bindInkTips = function (bar) {
@@ -3418,7 +3610,7 @@
     var show = function (el) {
       var text = el && el.dataset.tip;
       if (!text) return kill();
-      if (!tip) {
+      if (!tip || !tip.isConnected) {
         tip = document.createElement('span');
         tip.className = 'cf-ink-tipbox';
         bar.appendChild(tip);
@@ -3866,7 +4058,7 @@
         hlWidth: i.hlWidth, hlAlpha: i.hlAlpha, hlStraight: i.hlStraight,
         lowLag: i.lowLag, shapeFill: i.shapeFill,
         eraseType: i.eraseType, eraseSize: i.eraseSize, eraseHlOnly: i.eraseHlOnly,
-        color: i.color, custom: i.custom
+        color: i.color, custom: i.custom, collapsed: i.collapsed, lastTool: i.lastTool
       }));
     } catch (err) {}
   };

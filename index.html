@@ -81,6 +81,7 @@
   el.setAttribute('data-ws-url', CFG.WS_URL || '');
   el.setAttribute('data-room', readRoom(query.get('room')) || CFG.ROOM || 'lamezia');
   el.setAttribute('data-app-name', CFG.APP_NAME || 'LAMEZIA 敬拜内通');
+  if (CFG.ORG_NAME) el.setAttribute('data-org-name', CFG.ORG_NAME);
   el.setAttribute('data-mode', 'menu');           // 永远是合体入口，身份在组件内选
   el.setAttribute('data-page-key', CFG.STORE_KEY || 'lamezia');
   if (autoRole) el.setAttribute('data-auto-role', autoRole);

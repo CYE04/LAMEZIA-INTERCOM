@@ -129,6 +129,7 @@ cd worker && npx wrangler secret put OPERATOR_KEY
 | `WS_URL` | ★ Worker 的 wss 地址，部署后必填 |
 | `ROOM` | 房间名，要和 `worker/wrangler.toml` 的默认值一致 |
 | `APP_NAME` | 界面上显示的名称，各处标题都读它 |
+| `ORG_NAME` | 页脚署名的教会名（留空则用 `APP_NAME`）。上游会在页脚硬编码自己的教会名，合并后务必检查 |
 | `STORE_KEY` | localStorage 命名空间，固定值，别改成跟路径走 |
 | `ROLE_KEY` | 记住身份用的键名 |
 
@@ -246,7 +247,10 @@ cd .. && python3 -m http.server 8081
   换视图（原图 / 移调）也是独立的一套。
 - **服务端往返**：前端发 `ink`，worker 存进 DO storage 并广播；`ink_get` 拉取已有标注。
   和歌单一样，worker 没部署这些消息类型的话画了不同步。
-- **undo 只撤自己那一笔**（服务端按 `by` 字段匹配），不会把别人的记号撤掉。
+- **工具条默认收起**成一个可拖动的小圆浮标，点一下展开并自动选中「笔」。
+- **undo 按 id 删**（本地修复；上游是「撤自己最后一笔」，会删错笔）。
+  不带 id 的老客户端才退回按 `by` 撤最后一笔。
+- **清空**只允许 `client` / `operator`，免凭据的 listener 不能清（本地修复）。
 - **激光笔不存盘**，只即时转发给房间里其他人，自己不回显。
 - **隔天自动清空**（跟当天的谱走）；歌单是「本周诗歌」所以保留。
 - 存储上限：每首歌最多 400 笔，单笔最多 600 个点，坐标压到 3 位小数。
@@ -260,6 +264,31 @@ cd .. && python3 -m http.server 8081
 在 `cecp.js` 的 `renderScore` 附近。与第 9 节那四个外部地址不同，
 **它没有对应的 `data-*` 可以覆盖**。以后要让 Lamezia 完全独立于 CECP，
 除了改那四个地址，还要改这一处代码。
+
+## 10.2 每次从上游合并之后
+
+```bash
+node tools/test-worker.mjs      # 35 项回归，确认本地修复没被冲掉
+```
+
+本项目相对 CECP 上游有几处**上游没有**的修复，合并时最容易被冲掉：
+
+| 本地修复 | 在哪 |
+|---|---|
+| 音控 fail-closed 鉴权（`OPERATOR_KEY`） | `worker/index.js` |
+| 设备占用按「设备」比对（`deviceOf`） | `worker/index.js` |
+| 墨迹 undo 按 id 删 | `worker/index.js` |
+| 墨迹 clear 排除 listener | `worker/index.js` |
+| 墨迹存储总量上限 + 失败回滚（`_saveInk`） | `worker/index.js` |
+| 清空确认 fail-safe（`var ok = false`） | `cecp.js` |
+| 页脚教会名可配置（`data-org-name`） | `cecp.js` |
+
+**合并手法**：以上游新版 `cecp.js` 为基底，把本地改动逐条重打上去
+（而不是把上游差异往本地文件上挑）。worker 则相反——只从上游挑新增的消息类型，
+**绝不整份覆盖**，因为上游至今没有上面这些修复。
+
+还要留意：**上游可能在界面里硬编码自己的教会名**（如「帕多瓦华人教会」），
+只 grep `CECP` 抓不到。合并后搜一下中文教会名。
 
 ## 11. 已知边界
 
